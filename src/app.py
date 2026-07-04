@@ -1,13 +1,15 @@
 import os
 import tempfile
-from datetime import date
+from datetime import date, datetime
+import threading
+import uuid
 from pathlib import Path
 from flask import Flask, render_template, request, jsonify, send_file
 from pdf_parser import PDFParser
 from plant_matcher import PlantMatcher
 from passport_generator import generate_excel
 from pdf_generator import build_outputs, zip_outputs
-from drive_uploader import get_status, upload_outputs
+from drive_uploader import get_status, upload_outputs, collect_output_files
 from session import session
 from paths import DATA_DIR, OUTPUT_DIR
 
@@ -165,6 +167,63 @@ def generate_pdf_route():
     )
 
 
+_UPLOAD_LOCK = threading.Lock()
+_UPLOAD_JOBS = {}
+_ACTIVE_UPLOAD_JOB_ID = None
+
+
+def _copy_upload_state(job_id: str) -> dict | None:
+    with _UPLOAD_LOCK:
+        state = _UPLOAD_JOBS.get(job_id)
+        return dict(state) if state is not None else None
+
+
+def _set_upload_state(job_id: str, **changes) -> None:
+    with _UPLOAD_LOCK:
+        if job_id in _UPLOAD_JOBS:
+            _UPLOAD_JOBS[job_id].update(changes)
+
+
+def _run_upload_job(job_id: str, date_str: str) -> None:
+    global _ACTIVE_UPLOAD_JOB_ID
+
+    def report(event):
+        done = event.get('done', 0)
+        total = event.get('total', 0)
+        current = event.get('current', '')
+        percent = int((done / total) * 100) if total > 0 else 0
+        _set_upload_state(
+            job_id, done=done, total=total, percent=percent, current=current)
+
+    try:
+        result = upload_outputs(date_str, progress_callback=report, max_workers=4)
+        state = _copy_upload_state(job_id) or {}
+        total = state.get('total', len(result['files']))
+        _set_upload_state(
+            job_id,
+            status='done',
+            done=total,
+            total=total,
+            percent=100,
+            current='',
+            folder_link=result['folder_link'],
+            files=result['files'],
+            error=None,
+            finished_at=datetime.now().isoformat(timespec='seconds'),
+        )
+    except Exception as e:
+        _set_upload_state(
+            job_id,
+            status='error',
+            error=str(e),
+            finished_at=datetime.now().isoformat(timespec='seconds'),
+        )
+    finally:
+        with _UPLOAD_LOCK:
+            if _ACTIVE_UPLOAD_JOB_ID == job_id:
+                _ACTIVE_UPLOAD_JOB_ID = None
+
+
 @app.route('/api/drive-status', methods=['GET'])
 def drive_status_route():
     """Stav napojení na Google Drive (credentials + token)."""
@@ -174,20 +233,55 @@ def drive_status_route():
 @app.route('/api/upload-drive', methods=['POST'])
 def upload_drive_route():
     """
-    Nahraje výstupy dne na Google Drive do složky Pasy/{datum}/.
+    Spustí nahrávání výstupů dne na Google Drive do složky Pasy/{datum}/.
     Body (volitelné): { "date": "YYYY-MM-DD" } — výchozí dnešek.
     """
-    data = request.get_json(silent=True) or {}
-    date_str = data.get('date') or date.today().isoformat()
+    global _ACTIVE_UPLOAD_JOB_ID
+    date_str = (request.get_json(silent=True) or {}).get('date') or date.today().isoformat()
+    local_files = collect_output_files(date_str)
+    if not local_files:
+        return jsonify({'error': 'Složka výstupů neexistuje — nejprve vygenerujte PDF'}), 400
 
-    try:
-        result = upload_outputs(date_str)
-    except RuntimeError as e:
-        return jsonify({'error': str(e)}), 400
-    except Exception as e:
-        return jsonify({'error': f'Chyba při nahrávání na Drive: {e}'}), 500
+    with _UPLOAD_LOCK:
+        if (
+            _ACTIVE_UPLOAD_JOB_ID
+            and _UPLOAD_JOBS.get(_ACTIVE_UPLOAD_JOB_ID, {}).get('status') == 'running'
+        ):
+            return jsonify({
+                'error': 'Nahrávání už probíhá',
+                'job_id': _ACTIVE_UPLOAD_JOB_ID,
+                'status': 'running',
+            }), 409
 
-    return jsonify(result)
+        job_id = uuid.uuid4().hex
+        _UPLOAD_JOBS.clear()
+        _UPLOAD_JOBS[job_id] = {
+            'job_id': job_id,
+            'status': 'running',
+            'date': date_str,
+            'started_at': datetime.now().isoformat(timespec='seconds'),
+            'finished_at': None,
+            'total': len(local_files),
+            'done': 0,
+            'percent': 0,
+            'current': 'Čekám na Google Drive…',
+            'folder_link': '',
+            'files': [],
+            'error': None,
+        }
+        _ACTIVE_UPLOAD_JOB_ID = job_id
+
+    threading.Thread(
+        target=_run_upload_job, args=(job_id, date_str), daemon=True).start()
+    return jsonify({'job_id': job_id, 'status': 'running'}), 202
+
+
+@app.route('/api/upload-drive/progress/<job_id>', methods=['GET'])
+def upload_drive_progress_route(job_id):
+    state = _copy_upload_state(job_id)
+    if state is None:
+        return jsonify({'error': 'Upload job nenalezen'}), 404
+    return jsonify(state)
 
 
 @app.route('/api/debug-tables', methods=['POST'])

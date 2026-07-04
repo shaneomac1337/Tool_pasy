@@ -209,7 +209,8 @@ main {
   transition: width .3s;
 }
 
-#progress-text { font-size: 13px; color: #555; white-space: nowrap; }
+#progress-text,
+#drive-progress-text { font-size: 13px; color: #555; white-space: nowrap; }
 
 /* ── Výsledky ────────────────────────────────────────────── */
 .results-header {

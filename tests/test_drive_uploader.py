@@ -14,6 +14,8 @@ Kontrakt pod ochranou:
 import json
 import re
 import sys
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -59,13 +61,15 @@ class _FakeFiles:
         self.file_creates = []
         self.updates = []
         self._seq = 0
+        self._lock = threading.Lock()
 
     def list(self, q='', **kwargs):
-        self.queries.append(q)
-        m = re.search(r"name\s*=\s*'((?:[^'\\]|\\.)*)'", q)
-        name = m.group(1).replace("\\'", "'") if m else None
-        pool = self.folders if FOLDER_MIME in q else self.existing
-        hits = [{'id': pool[name]}] if name in pool else []
+        with self._lock:
+            self.queries.append(q)
+            m = re.search(r"name\s*=\s*'((?:[^'\\]|\\.)*)'", q)
+            name = m.group(1).replace("\\'", "'") if m else None
+            pool = self.folders if FOLDER_MIME in q else self.existing
+            hits = [{'id': pool[name]}] if name in pool else []
         return _FakeRequest({'files': hits})
 
     def get(self, fileId=None, **kwargs):
@@ -73,19 +77,21 @@ class _FakeFiles:
 
     def create(self, body=None, media_body=None, **kwargs):
         body = body or {}
-        self._seq += 1
-        if body.get('mimeType') == FOLDER_MIME:
-            fid = f'folder-{self._seq}'
-            self.folder_creates.append({'body': body, 'id': fid})
-            self.folders[body['name']] = fid
-        else:
-            fid = f'file-{self._seq}'
-            self.file_creates.append(
-                {'body': body, 'media_body': media_body, 'id': fid})
+        with self._lock:
+            self._seq += 1
+            if body.get('mimeType') == FOLDER_MIME:
+                fid = f'folder-{self._seq}'
+                self.folder_creates.append({'body': body, 'id': fid})
+                self.folders[body['name']] = fid
+            else:
+                fid = f'file-{self._seq}'
+                self.file_creates.append(
+                    {'body': body, 'media_body': media_body, 'id': fid})
         return _FakeRequest({'id': fid, 'webViewLink': _view_link(fid)})
 
     def update(self, fileId=None, media_body=None, **kwargs):
-        self.updates.append({'fileId': fileId, 'media_body': media_body})
+        with self._lock:
+            self.updates.append({'fileId': fileId, 'media_body': media_body})
         return _FakeRequest({'id': fileId, 'webViewLink': _view_link(fileId)})
 
 
@@ -237,6 +243,33 @@ def test_upload_outputs_creates_new_files(paths, outputs_dir, monkeypatch):
         (paths / 'drive_config.json').read_text(encoding='utf-8'))
     assert config['pasy_folder_id'] == 'root-pasy-id'
 
+def test_upload_outputs_reports_progress(paths, outputs_dir, monkeypatch):
+    files = _FakeFiles(folders={'Pasy': 'root-pasy-id', DATE: 'day-folder-id'})
+    monkeypatch.setattr(du, 'get_service', lambda: _FakeService(files))
+    events = []
+
+    result = du.upload_outputs(DATE, progress_callback=events.append, max_workers=1)
+
+    assert [f['name'] for f in result['files']] == ['a.pdf', 'recipients.xlsx']
+    assert events[0] == {
+        'stage': 'preparing',
+        'done': 0,
+        'total': 2,
+        'current': 'Připravuji složku na Drive…',
+    }
+    assert events[-1] == {
+        'stage': 'done',
+        'done': 2,
+        'total': 2,
+        'current': '',
+    }
+    uploaded_events = [event for event in events if event['stage'] == 'uploaded']
+    assert len(uploaded_events) == 2
+    assert [event['done'] for event in uploaded_events] == [1, 2]
+    assert {event['file']['name'] for event in uploaded_events} == {
+        'a.pdf', 'recipients.xlsx'}
+    assert all(event['file']['link'] for event in uploaded_events)
+
 
 def test_upload_outputs_updates_existing_file(paths, outputs_dir, monkeypatch):
     files = _FakeFiles(
@@ -266,6 +299,18 @@ def client():
         yield c
 
 
+def wait_upload_done(client, job_id, timeout=2.0):
+    deadline = time.monotonic() + timeout
+    last_state = None
+    while time.monotonic() < deadline:
+        resp = client.get(f'/api/upload-drive/progress/{job_id}')
+        assert resp.status_code == 200
+        last_state = resp.get_json()
+        if last_state['status'] in {'done', 'error'}:
+            return last_state
+        time.sleep(0.02)
+    raise AssertionError(f'Upload job did not finish: {last_state!r}')
+
 def test_drive_status_route(client, paths):
     resp = client.get('/api/drive-status')
     assert resp.status_code == 200
@@ -278,3 +323,32 @@ def test_upload_drive_route_no_outputs(client, paths, monkeypatch):
     assert resp.status_code == 400
     data = resp.get_json()
     assert re.search(r'výstup|vygenerujte', data['error'])
+
+
+def test_upload_drive_route_starts_job_and_reports_done(
+        client, outputs_dir, monkeypatch):
+    files = _FakeFiles(folders={'Pasy': 'root-pasy-id', DATE: 'day-folder-id'})
+    monkeypatch.setattr(du, 'get_service', lambda: _FakeService(files))
+
+    resp = client.post('/api/upload-drive', json={'date': DATE})
+
+    assert resp.status_code == 202
+    started = resp.get_json()
+    assert started['status'] == 'running'
+    assert started['job_id']
+
+    final = wait_upload_done(client, started['job_id'])
+    assert final['status'] == 'done'
+    assert final['percent'] == 100
+    assert final['total'] == 2
+    assert final['done'] == 2
+    assert final['folder_link'] == (
+        'https://drive.google.com/drive/folders/day-folder-id')
+    assert {f['name'] for f in final['files']} == {'a.pdf', 'recipients.xlsx'}
+
+
+def test_upload_drive_progress_unknown_job(client):
+    resp = client.get('/api/upload-drive/progress/nope')
+
+    assert resp.status_code == 404
+    assert resp.get_json()['error'] == 'Upload job nenalezen'

@@ -6,7 +6,9 @@ Soubory credentials.json / token.json / drive_config.json leží vedle app.py.
 Import modulu nikdy nesmí selhat ani mít vedlejší efekty (síť, zápis souborů)
 — Google knihovny se importují líně uvnitř funkcí.
 """
+import concurrent.futures
 import json
+import threading
 
 from paths import CREDENTIALS_PATH, TOKEN_PATH, CONFIG_PATH, OUTPUT_DIR as OUTPUT_BASE
 
@@ -115,27 +117,42 @@ def _get_pasy_folder_id(service) -> str:
     return folder_id
 
 
-def upload_outputs(date_str: str) -> dict:
+def collect_output_files(date_str: str) -> list[Path]:
+    """Vrátí setříděné lokální výstupní soubory pro daný den."""
+    out_dir = OUTPUT_BASE / f'pasy_{date_str}'
+    if not out_dir.is_dir():
+        return []
+    return sorted(p for p in out_dir.iterdir() if p.is_file())
+
+
+def upload_outputs(date_str: str, progress_callback=None, max_workers: int = 4) -> dict:
     """
     Nahraje soubory z výstupy/pasy_{date_str}/ do Drive složky Pasy/{date_str}/.
     Stejnojmenné soubory přepíše (update), nové vytvoří. Vrací odkazy.
     """
-    out_dir = OUTPUT_BASE / f'pasy_{date_str}'
-    local_files = (
-        sorted(p for p in out_dir.iterdir() if p.is_file())
-        if out_dir.is_dir() else []
-    )
+    local_files = collect_output_files(date_str)
     if not local_files:
         raise RuntimeError('Složka výstupů neexistuje — nejprve vygenerujte PDF')
 
-    from googleapiclient.http import MediaFileUpload
+    def report(event: dict) -> None:
+        if progress_callback:
+            progress_callback(event)
 
-    service = get_service()
-    pasy_id = _get_pasy_folder_id(service)
-    folder_id = ensure_folder(service, date_str, pasy_id)
+    def upload_one(index: int, path: Path, folder_id: str):
+        nonlocal done_count
+        with progress_lock:
+            current_done = done_count
+        report({
+            'stage': 'uploading',
+            'done': current_done,
+            'total': len(local_files),
+            'current': path.name,
+            'file': path.name,
+        })
 
-    uploaded = []
-    for path in local_files:
+        from googleapiclient.http import MediaFileUpload
+
+        service = get_service()
         mimetype = _MIMETYPES.get(path.suffix.lower(),
                                   'application/octet-stream')
         media = MediaFileUpload(str(path), mimetype=mimetype)
@@ -157,13 +174,61 @@ def upload_outputs(date_str: str) -> dict:
                 media_body=media, fields='id,webViewLink').execute()
             updated = False
 
-        uploaded.append({
+        file_result = {
             'name': path.name,
             'link': info.get('webViewLink', ''),
             'updated': updated,
+        }
+
+        with progress_lock:
+            done_count += 1
+            completed = done_count
+        report({
+            'stage': 'uploaded',
+            'done': completed,
+            'total': len(local_files),
+            'current': path.name,
+            'file': file_result,
         })
+        return index, file_result
+
+    report({
+        'stage': 'preparing',
+        'done': 0,
+        'total': len(local_files),
+        'current': 'Připravuji složku na Drive…',
+    })
+
+    service = get_service()
+    pasy_id = _get_pasy_folder_id(service)
+    folder_id = ensure_folder(service, date_str, pasy_id)
+
+    done_count = 0
+    progress_lock = threading.Lock()
+    uploaded = [None] * len(local_files)
+    worker_count = max(1, min(int(max_workers or 1), len(local_files)))
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=worker_count) as executor:
+        futures = {
+            executor.submit(upload_one, index, path, folder_id): path
+            for index, path in enumerate(local_files)
+        }
+        for future in concurrent.futures.as_completed(futures):
+            path = futures[future]
+            try:
+                index, file_result = future.result()
+            except Exception as e:
+                raise RuntimeError(f'Chyba při nahrávání {path.name}: {e}') from e
+            uploaded[index] = file_result
+
+    report({
+        'stage': 'done',
+        'done': len(local_files),
+        'total': len(local_files),
+        'current': '',
+    })
 
     return {
         'folder_link': f'https://drive.google.com/drive/folders/{folder_id}',
-        'files': uploaded,
+        'files': [item for item in uploaded if item is not None],
     }

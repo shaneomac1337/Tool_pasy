@@ -21,6 +21,9 @@ const btnBackTo2       = document.getElementById('btn-back-to-2');
 const btnGenerateExcel = document.getElementById('btn-generate-excel');
 const btnGeneratePdf   = document.getElementById('btn-generate-pdf');
 const btnUploadDrive   = document.getElementById('btn-upload-drive');
+const driveProgress    = document.getElementById('drive-progress');
+const driveProgressBar = document.getElementById('drive-progress-bar');
+const driveProgressText = document.getElementById('drive-progress-text');
 
 // ── Elementy Krok 2 ────────────────────────────────────────
 const sectionMatch  = document.getElementById('section-match');
@@ -45,8 +48,12 @@ dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classL
 dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragging'));
 dropZone.addEventListener('drop', e => {
   e.preventDefault(); dropZone.classList.remove('dragging');
-  const files = Array.from(e.dataTransfer.files).filter(f => f.name.toLowerCase().endsWith('.pdf'));
-  if (files.length) handleFiles(files);
+  const allFiles = Array.from(e.dataTransfer.files);
+  const files = allFiles.filter(f => f.name.toLowerCase().endsWith('.pdf'));
+  const ignored = allFiles.length - files.length;
+  if (ignored > 0) alert(`Přeskočeno ${ignored} souborů, které nejsou PDF.`);
+  if (files.length === 0) return;
+  handleFiles(files);
 });
 fileInput.addEventListener('change', () => {
   if (fileInput.files.length) handleFiles(Array.from(fileInput.files));
@@ -137,6 +144,50 @@ function showInvoiceTable(data) {
 function setProgress(pct, text) {
   progressBar.style.width = pct + '%';
   if (text) progressText.textContent = text;
+}
+
+function setGenerateLoading(text) {
+  generateLoading.querySelector('span').textContent = text;
+  generateLoading.style.display = 'flex';
+}
+
+function setDriveProgress(state) {
+  const pct = Number(state.percent || 0);
+  driveProgressBar.style.width = Math.max(0, Math.min(100, pct)) + '%';
+  const total = state.total || 0;
+  const done = state.done || 0;
+  const current = state.current ? ' — ' + state.current : '';
+  driveProgressText.textContent = total
+    ? `Nahrávám na Drive ${done}/${total}${current}`
+    : 'Připravuji Google Drive…';
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function pollDriveUpload(jobId) {
+  while (true) {
+    const res = await fetch(`/api/upload-drive/progress/${jobId}`);
+    const state = await res.json();
+    if (!res.ok) throw new Error(state.error || 'Chyba při kontrole nahrávání');
+    setDriveProgress(state);
+    if (state.status === 'done') return state;
+    if (state.status === 'error') throw new Error(state.error || 'Chyba při nahrávání na Drive');
+    await sleep(500);
+  }
+}
+
+function renderDriveSuccess(data) {
+  const fileItems = (data.files || []).map(f =>
+    `<li><a href="${f.link}" target="_blank">${esc(f.name)}</a></li>`
+  ).join('');
+  generateResult.innerHTML = `
+    <div class="gen-success">
+      ✓ Nahráno na Google Drive —
+      <a href="${data.folder_link}" target="_blank">Otevřít složku</a>
+      <ul class="drive-file-list">${fileItems}</ul>
+    </div>`;
 }
 
 btnReset.addEventListener('click', () => {
@@ -282,6 +333,7 @@ function buildManualSearch(invNum, idx, prefill) {
       <input type="text" class="manual-input"
              placeholder="Zadej název ze šarže…"
              value="${esc(prefill || '')}"
+             onkeydown="if(event.key==='Enter'){event.preventDefault();doManualSearch('${invNum}',${idx});}"
              id="minput-${invNum}-${idx}" />
       <button class="btn-search" onclick="doManualSearch('${invNum}',${idx})">🔍 Hledat</button>
       <div class="search-result" id="sresult-${invNum}-${idx}"></div>
@@ -613,9 +665,10 @@ btnGenerateExcel.addEventListener('click', async () => {
   const invoices = collectFinalData();
   if (!invoices.length) return;
 
-  generateLoading.style.display = 'flex';
+  setGenerateLoading('Generuji Excel…');
   btnGenerateExcel.disabled = true;
   generateResult.classList.add('hidden');
+  driveProgress.classList.add('hidden');
 
   try {
     const res = await fetch('/api/generate-excel', {
@@ -663,9 +716,10 @@ btnGeneratePdf.addEventListener('click', async () => {
   const invoices = collectFinalData();
   if (!invoices.length) return;
 
-  generateLoading.style.display = 'flex';
+  setGenerateLoading('Generuji PDF a ZIP…');
   btnGeneratePdf.disabled = true;
   generateResult.classList.add('hidden');
+  driveProgress.classList.add('hidden');
 
   try {
     const res = await fetch('/api/generate-pdf', {
@@ -710,7 +764,9 @@ btnGeneratePdf.addEventListener('click', async () => {
 });
 
 btnUploadDrive.addEventListener('click', async () => {
-  generateLoading.style.display = 'flex';
+  generateLoading.style.display = 'none';
+  driveProgress.classList.remove('hidden');
+  setDriveProgress({ percent: 0, total: 0, done: 0, current: 'Čekám na Google Drive…' });
   btnUploadDrive.disabled = true;
   generateResult.classList.add('hidden');
 
@@ -720,24 +776,24 @@ btnUploadDrive.addEventListener('click', async () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({})
     });
+    const data = await res.json();
 
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error || 'Chyba serveru');
+    let jobId = null;
+    if (res.status === 202) {
+      jobId = data.job_id;
+    } else if (res.status === 409 && data.job_id) {
+      jobId = data.job_id;
+    } else if (!res.ok) {
+      throw new Error(data.error || 'Chyba serveru');
+    } else {
+      jobId = data.job_id;
     }
 
-    const data = await res.json();
-    const fileItems = (data.files || []).map(f =>
-      `<li><a href="${f.link}" target="_blank">${esc(f.name)}</a></li>`
-    ).join('');
-
-    generateResult.innerHTML = `
-      <div class="gen-success">
-        ✓ Nahráno na Google Drive —
-        <a href="${data.folder_link}" target="_blank">Otevřít složku</a>
-        <ul class="drive-file-list">${fileItems}</ul>
-      </div>`;
+    const state = await pollDriveUpload(jobId);
+    renderDriveSuccess(state);
     generateResult.classList.remove('hidden');
+    await sleep(800);
+    driveProgress.classList.add('hidden');
 
   } catch (e) {
     generateResult.innerHTML = `<div class="gen-error">✗ ${e.message}</div>`;

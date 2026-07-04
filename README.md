@@ -123,6 +123,10 @@ IDs) — it never creates duplicates.
   token is cached and refreshed automatically forever after.
 - Upload is a **separate step** from generation (its own `POST /api/upload-drive`),
   so it's retryable and never blocks the ZIP download.
+- The Drive step now shows upload progress (file count + current file) instead
+  of looking frozen during larger batches.
+- Files are uploaded concurrently, up to 4 at a time; re-uploading the same date
+  still updates existing Drive files in place.
 
 ### One-time Google Cloud setup
 
