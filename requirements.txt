@@ -1,0 +1,18 @@
+# Web framework
+flask
+
+# Invoice PDF parsing
+pdfplumber
+
+# Fuzzy plant-name matching (python-Levenshtein optional, speeds it up)
+thefuzz
+
+# Excel + PDF passport generation
+openpyxl
+reportlab
+pypdf
+
+# Google Drive upload (OAuth installed-app flow, scope drive.file)
+google-api-python-client
+google-auth-oauthlib
+google-auth-httplib2
