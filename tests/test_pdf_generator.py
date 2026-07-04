@@ -70,6 +70,21 @@ def test_parser_page_run_grouping(tmp_path):
     assert inv112.email == ''
 
 
+def test_parse_items_excludes_gift_voucher():
+    """Řádky 'Dárkový poukaz' a 'Přidaný produkt' se při parsování vynechají."""
+    table = [
+        ['() Dárkový poukaz v hodnotě 1000 Kč', '1', '1 000', '1 000'],
+        ['() Přidaný produkt', '1', '50', '50'],
+        ['() Agave parryi var. parryi', '3', '120', '360'],
+    ]
+    parser = PDFParser()
+    plants = parser._parse_items(table)
+
+    assert [p.name for p in plants] == ['Agave parryi var. parryi']
+    assert parser._is_non_plant('Dárkový poukaz v hodnotě 1000 Kč') is True
+    assert parser._is_non_plant('Agave parryi var. parryi') is False
+
+
 # ---------------------------------------------------------------- build_outputs
 
 def test_merge_with_source_invoice(tmp_path, source_pdf):

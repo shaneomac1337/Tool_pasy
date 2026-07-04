@@ -51,6 +51,7 @@ class PDFParser:
         'ppl', 'česká pošta', 'poštovné', 'doprava', 'balné',
         'přepravné', 'záloha', 'sleva', 'shipping', 'delivery',
         'expedice', 'dobírka', 'přidaný produkt', 'dle výběru',
+        'dárkový poukaz',
     ]
 
     def parse_files(self, file_paths: List[str],
