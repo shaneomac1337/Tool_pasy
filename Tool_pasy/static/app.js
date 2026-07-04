@@ -20,6 +20,7 @@ const generateResult   = document.getElementById('generate-result');
 const btnBackTo2       = document.getElementById('btn-back-to-2');
 const btnGenerateExcel = document.getElementById('btn-generate-excel');
 const btnGeneratePdf   = document.getElementById('btn-generate-pdf');
+const btnUploadDrive   = document.getElementById('btn-upload-drive');
 
 // ── Elementy Krok 2 ────────────────────────────────────────
 const sectionMatch  = document.getElementById('section-match');
@@ -647,6 +648,7 @@ btnGenerateExcel.addEventListener('click', async () => {
         <small>Soubor je také uložen ve složce <code>Tool_pasy/výstupy/</code></small>
       </div>`;
     generateResult.classList.remove('hidden');
+    btnUploadDrive.disabled = false;
 
   } catch (e) {
     generateResult.innerHTML = `<div class="gen-error">✗ Chyba: ${e.message}</div>`;
@@ -696,12 +698,52 @@ btnGeneratePdf.addEventListener('click', async () => {
         <small>Soubory jsou také uloženy ve složce <code>Tool_pasy/výstupy/</code></small>
       </div>`;
     generateResult.classList.remove('hidden');
+    btnUploadDrive.disabled = false;
 
   } catch (e) {
     generateResult.innerHTML = `<div class="gen-error">✗ Chyba: ${e.message}</div>`;
     generateResult.classList.remove('hidden');
   } finally {
     btnGeneratePdf.disabled = false;
+    generateLoading.style.display = 'none';
+  }
+});
+
+btnUploadDrive.addEventListener('click', async () => {
+  generateLoading.style.display = 'flex';
+  btnUploadDrive.disabled = true;
+  generateResult.classList.add('hidden');
+
+  try {
+    const res = await fetch('/api/upload-drive', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({})
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Chyba serveru');
+    }
+
+    const data = await res.json();
+    const fileItems = (data.files || []).map(f =>
+      `<li><a href="${f.link}" target="_blank">${esc(f.name)}</a></li>`
+    ).join('');
+
+    generateResult.innerHTML = `
+      <div class="gen-success">
+        ✓ Nahráno na Google Drive —
+        <a href="${data.folder_link}" target="_blank">Otevřít složku</a>
+        <ul class="drive-file-list">${fileItems}</ul>
+      </div>`;
+    generateResult.classList.remove('hidden');
+
+  } catch (e) {
+    generateResult.innerHTML = `<div class="gen-error">✗ ${e.message}</div>`;
+    generateResult.classList.remove('hidden');
+  } finally {
+    btnUploadDrive.disabled = false;
     generateLoading.style.display = 'none';
   }
 });
@@ -719,3 +761,13 @@ function setNavStep(num) {
 function esc(s) {
   return (s || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;');
 }
+
+// ── Stav Google Drive (vylepšení tooltipu) ─────────────────
+fetch('/api/drive-status')
+  .then(res => res.ok ? res.json() : null)
+  .then(status => {
+    if (status && !status.credentials) {
+      btnUploadDrive.title = 'Google Drive není nastaven — chybí credentials.json';
+    }
+  })
+  .catch(() => {});

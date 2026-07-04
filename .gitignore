@@ -13,3 +13,8 @@ __MACOSX/
 
 # Local tool settings
 Tool_pasy/.claude/settings.local.json
+
+# Google Drive
+Tool_pasy/credentials.json
+Tool_pasy/token.json
+Tool_pasy/drive_config.json

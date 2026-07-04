@@ -702,6 +702,32 @@ td { padding: 10px 14px; color: #333; }
   color: #8b0000; font-size: 14px;
 }
 
+/* ── Tlačítko Nahrát na Drive ────────────────────────────── */
+.btn-drive {
+  background: #f2f7fc;
+  color: #1a5fa8;
+  border: 2px solid #1a5fa8;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .2s, color .2s;
+}
+.btn-drive:hover:not(:disabled) {
+  background: #1a5fa8;
+  color: #fff;
+}
+.btn-drive:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.drive-file-list {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  font-size: 13px;
+}
+
 /* ── Kandidátní výběr (pick-list) ─────────────────────────── */
 .fuzzy-suggestion .reason {
   color: #7a5800;

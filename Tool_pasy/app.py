@@ -9,6 +9,7 @@ from pdf_parser import PDFParser
 from plant_matcher import PlantMatcher
 from passport_generator import generate_excel
 from pdf_generator import build_outputs
+from drive_uploader import get_status, upload_outputs
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 200 * 1024 * 1024
@@ -168,6 +169,31 @@ def generate_pdf_route():
         download_name=f"pasy_{date.today().isoformat()}.zip",
         mimetype='application/zip'
     )
+
+
+@app.route('/api/drive-status', methods=['GET'])
+def drive_status_route():
+    """Stav napojení na Google Drive (credentials + token)."""
+    return jsonify(get_status())
+
+
+@app.route('/api/upload-drive', methods=['POST'])
+def upload_drive_route():
+    """
+    Nahraje výstupy dne na Google Drive do složky Pasy/{datum}/.
+    Body (volitelné): { "date": "YYYY-MM-DD" } — výchozí dnešek.
+    """
+    data = request.get_json(silent=True) or {}
+    date_str = data.get('date') or date.today().isoformat()
+
+    try:
+        result = upload_outputs(date_str)
+    except RuntimeError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        return jsonify({'error': f'Chyba při nahrávání na Drive: {e}'}), 500
+
+    return jsonify(result)
 
 
 @app.route('/api/debug-tables', methods=['POST'])
