@@ -1,0 +1,239 @@
+================================================================================
+STEP 2 IMPLEMENTATION - PLANT NAME MATCHING WITH SARZE CODES
+================================================================================
+
+DATE: 2026-03-07
+STATUS: COMPLETE AND TESTED
+
+================================================================================
+DEPENDENCIES INSTALLED
+================================================================================
+
+✓ thefuzz         - Fuzzy string matching library
+✓ python-Levenshtein - Performance optimization for fuzzy matching
+✓ openpyxl        - Excel file reading (already present)
+
+Installation command:
+  pip3 install thefuzz openpyxl python-Levenshtein --break-system-packages
+
+
+================================================================================
+NEW FILES CREATED
+================================================================================
+
+1. plant_matcher.py (4.1 KB)
+   Location: /sessions/zealous-pensive-ramanujan/mnt/Tool_pasy/plant_matcher.py
+   Purpose:  Core plant matching logic with fuzzy search
+   
+   Key class: PlantMatcher
+   - Loads sarze.xlsx at initialization
+   - Provides match_plant() method for individual matching
+   - Provides match_invoice_plants() for batch processing
+   - Uses token_sort_ratio for fuzzy matching (threshold: 65%)
+   - Normalizes plant names (lowercase, whitespace, removes sizes)
+
+
+================================================================================
+MODIFIED FILES
+================================================================================
+
+1. app.py (3.0 KB)
+   Location: /sessions/zealous-pensive-ramanujan/mnt/Tool_pasy/app.py
+   Changes:
+   - Added: from plant_matcher import PlantMatcher
+   - Added: matcher = PlantMatcher(str(SARZE_PATH)) at startup
+   - Added: POST /api/match endpoint
+     * Processes all loaded invoices
+     * Returns matched plants with confidence scores
+     * Returns statistics (exact, fuzzy, none)
+     * Returns all sarze names for autocomplete
+
+
+2. templates/index.html (3.6 KB)
+   Location: /sessions/zealous-pensive-ramanujan/mnt/Tool_pasy/templates/index.html
+   Changes:
+   - Added: Section "KROK 2: Párování" (hidden by default)
+   - Features:
+     * Match statistics (exact/fuzzy/none badges)
+     * Invoice blocks with plant matching tables
+     * Loading spinner during matching
+     * Ability to accept/reject fuzzy suggestions
+     * Manual code input for unmatched plants
+   - Navigation: Step indicator (1 → 2 → 3 → 4)
+
+
+3. static/style.css (11 KB, appended)
+   Location: /sessions/zealous-pensive-ramanujan/mnt/Tool_pasy/static/style.css
+   Changes (appended at end):
+   - Added: .section-header styling
+   - Added: .match-stats layout
+   - Added: .pill.yellow and .pill.red colors
+   - Added: .spinner animation and .loading-state
+   - Added: .invoice-block and .invoice-block-header
+   - Added: .match-table styling (thead, td, tr)
+   - Added: Badge styles (.badge-exact, .badge-fuzzy, .badge-none)
+   - Added: .code-input styling (normal and .missing state)
+   - Added: .fuzzy-suggestion and fuzzy buttons
+   - Added: .step-summary and .btn-link
+
+
+4. static/app.js (12 KB, replaced)
+   Location: /sessions/zealous-pensive-ramanujan/mnt/Tool_pasy/static/app.js
+   Changes:
+   - Section 1 (Upload): Unchanged, fully preserved
+   - Section 2 (Matching): Completely new
+     * btnToStep2.click listener → loads matching
+     * loadMatching() → fetches /api/match
+     * renderMatchResults() → renders invoice blocks and tables
+     * matchBadge() → generates status badges
+     * acceptFuzzy() → handles fuzzy suggestion acceptance
+     * rejectFuzzy() → handles fuzzy suggestion rejection
+     * onCodeChange() → handles manual code edits
+     * checkStep2Ready() → validates all codes filled
+     * escapeStr() → HTML escaping helper
+     * setNavStep() → navigation indicator
+
+
+================================================================================
+NEW ENDPOINTS
+================================================================================
+
+POST /api/match
+  Input:  None (uses _session_invoices from previous upload)
+  Output: {
+    "invoices": [
+      {
+        "number": "INV-2025-001",
+        "date": "2025-03-07",
+        "customer": "Customer Name",
+        "source_file": "invoice.pdf",
+        "plants": [
+          {
+            "name": "Plant Name",
+            "quantity": "5 ks",
+            "match_type": "exact" | "fuzzy" | "none",
+            "confidence": 0-100,
+            "sarze_name": "Exact name from sarze",
+            "code": "25-Ro290",
+            "country": "CZ"
+          }
+        ]
+      }
+    ],
+    "stats": {
+      "exact": 42,
+      "fuzzy": 5,
+      "none": 2
+    },
+    "sarze_names": [...]
+  }
+
+
+================================================================================
+USER INTERFACE FLOW
+================================================================================
+
+Step 1 (Upload): Upload PDF invoices
+  ↓
+"Přiřadit kódy →" button
+  ↓
+Step 2 (Matching): Display and edit plant matches
+  
+  Loading → Renders invoice blocks:
+  
+  ┌─────────────────────────────────────┐
+  │ Faktura INV-2025-001 · Customer · Date [✓ OK or ⚠ 2 nenalezeno]
+  ├─────────────────────────────────────┤
+  │ Plant Name | Qty | Status | Sarze | Code      │
+  │ Cephalot.. │ 5   | ✓ Přes │ Ceph.. │ 25-Ro290 │
+  │ Unknown    │ 3   | ✗ Nena │  —    │ [input]  │
+  │ Viburnum.. │ 10  | ~ Náv  │ Vibur │ [accept] │
+  └─────────────────────────────────────┘
+  
+  Features:
+  - ✓ Přesná shoda → code auto-filled
+  - ~ Návrh (X%) → fuzzy suggestion with accept/reject
+  - ✗ Nenalezeno → empty field for manual entry
+  - All fields editable
+  - Next button disabled until all codes filled
+
+
+================================================================================
+MATCHING ALGORITHM
+================================================================================
+
+Input: Plant name from invoice (e.g., "Cephalotaxus fortunei 60-80 cm")
+
+Process:
+1. Normalize: lowercase, trim, remove dimensions
+   → "cephalotaxus fortunei"
+
+2. Exact match against all normalized sarze names
+   → If found: return match_type='exact', confidence=100%
+
+3. Fuzzy match using token_sort_ratio (theFuzz library)
+   → If score >= 65%: return match_type='fuzzy', confidence=score%
+   → Else: continue
+
+4. No match found
+   → return match_type='none', confidence=0%
+
+Configuration:
+  EXACT_THRESHOLD = 95   (currently unused, all matches are 100% or fuzzy)
+  FUZZY_THRESHOLD = 65   (minimum score to suggest fuzzy match)
+
+
+================================================================================
+TEST RESULTS
+================================================================================
+
+Loaded: 1731 plants from sarze.xlsx
+
+Test cases:
+  ✓ [exact 100%] Cephalotaxus fortunei
+  ✓ [exact 100%] cephalotaxus fortunei (case insensitive)
+  ✓ [exact 100%] Cephalotaxus fortunei 60-80 cm (dimension stripping)
+  ~ [fuzzy  98%] Cephalotaxus fortuneii (typo: -ei vs -eii)
+  ✓ [exact 100%] Amelanchier lamarckii
+  ~ [fuzzy  94%] Viburnum sergentii (typo: sargentii)
+  ✓ [exact 100%] Prunus tomentosa
+  ✓ [exact 100%] Prunus tomentosa 150-180 cm
+  ✗ [none    0%] Mystery Plant XYZ
+  ✗ [none    0%] Rostlina která neexistuje
+
+Results: 6 exact + 2 fuzzy + 2 none = 100% (10/10 correct)
+
+
+================================================================================
+FILE SIZES
+================================================================================
+
+New:
+  plant_matcher.py        4.1 KB
+
+Modified:
+  app.py                  3.0 KB (added ~80 lines)
+  templates/index.html    3.6 KB (added Step 2 section)
+  static/style.css       +3.0 KB (appended)
+  static/app.js          12 KB  (added ~250 lines)
+
+Total addition: ~25 KB (including all code, comments, formatting)
+
+
+================================================================================
+NEXT STEPS
+================================================================================
+
+Step 3: Generate PDF passes
+  - Convert matched data to RL format
+  - Create PDFs with barcode and metadata
+  - Endpoint: POST /api/generate-passes
+
+Step 4: Google Drive Integration
+  - Upload generated PDFs
+  - Create folder structure
+  - Share with users
+  - Endpoint: POST /api/upload-to-drive
+
+
+================================================================================

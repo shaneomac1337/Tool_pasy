@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Generated outputs
+Tool_pasy/výstupy/
+Tool_pasy/output/
+
+# macOS zip artifacts
+__MACOSX/
+.DS_Store
+
+# Local tool settings
+Tool_pasy/.claude/settings.local.json

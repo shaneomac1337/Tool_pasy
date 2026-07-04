@@ -1,0 +1,744 @@
+/* ── Reset & základy ─────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #f2f5f2;
+  color: #222;
+  min-height: 100vh;
+}
+
+/* ── Header ──────────────────────────────────────────────── */
+header {
+  background: #2a5f2a;
+  color: white;
+  padding: 0 32px;
+}
+
+.header-inner {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 0 12px;
+}
+
+.logo { font-size: 36px; }
+
+h1 { font-size: 22px; font-weight: 700; }
+
+.subtitle { font-size: 13px; color: #a8d4a8; margin-top: 2px; }
+
+/* ── Kroky navigace ──────────────────────────────────────── */
+.steps {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 0;
+  border-top: 1px solid rgba(255,255,255,0.15);
+  overflow-x: auto;
+}
+
+.step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 13px;
+  color: rgba(255,255,255,0.55);
+  white-space: nowrap;
+  transition: all .2s;
+}
+
+.step.active {
+  background: rgba(255,255,255,0.18);
+  color: white;
+  font-weight: 600;
+}
+
+.step.done { color: #a8d4a8; }
+
+.step-num {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.25);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700;
+}
+
+.step.active .step-num { background: white; color: #2a5f2a; }
+
+.step-arrow { color: rgba(255,255,255,0.35); font-size: 18px; }
+
+/* ── Main obsah ──────────────────────────────────────────── */
+main {
+  max-width: 900px;
+  margin: 32px auto;
+  padding: 0 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* ── Card ────────────────────────────────────────────────── */
+.card {
+  background: white;
+  border-radius: 12px;
+  padding: 28px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+}
+
+.card h2 {
+  font-size: 17px;
+  font-weight: 700;
+  color: #1e4a1e;
+  margin-bottom: 8px;
+}
+
+.hint {
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 20px;
+}
+
+/* ── Drop zone ───────────────────────────────────────────── */
+.drop-zone {
+  border: 2px dashed #b0ccb0;
+  border-radius: 10px;
+  padding: 40px 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: all .2s;
+  background: #f9fbf9;
+}
+
+.drop-zone:hover, .drop-zone.dragging {
+  border-color: #2a5f2a;
+  background: #f0f7f0;
+}
+
+.drop-icon { font-size: 40px; margin-bottom: 12px; }
+
+.drop-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 4px;
+}
+
+.drop-sub { font-size: 13px; color: #999; margin-bottom: 12px; }
+
+/* ── Tlačítka ────────────────────────────────────────────── */
+.btn-primary {
+  display: inline-block;
+  background: #2a5f2a;
+  color: white;
+  padding: 10px 22px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background .2s;
+}
+
+.btn-primary:hover { background: #1e4a1e; }
+
+.btn-primary:disabled {
+  background: #aaa;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  display: inline-block;
+  background: transparent;
+  color: #2a5f2a;
+  padding: 10px 22px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  border: 2px solid #2a5f2a;
+  cursor: pointer;
+  transition: all .2s;
+}
+
+.btn-secondary:hover { background: #f0f7f0; }
+
+/* ── Vybrané soubory ─────────────────────────────────────── */
+.file-list {
+  margin-top: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.file-chip {
+  background: #e8f4e8;
+  border: 1px solid #b0d4b0;
+  border-radius: 20px;
+  padding: 5px 12px;
+  font-size: 13px;
+  color: #2a5f2a;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ── Progress ────────────────────────────────────────────── */
+.progress-wrap {
+  margin-top: 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.progress-bar-bg {
+  flex: 1;
+  height: 8px;
+  background: #e0e8e0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: #2a5f2a;
+  border-radius: 4px;
+  width: 0%;
+  transition: width .3s;
+}
+
+#progress-text { font-size: 13px; color: #555; white-space: nowrap; }
+
+/* ── Výsledky ────────────────────────────────────────────── */
+.results-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.summary-pills { display: flex; gap: 8px; }
+
+.pill {
+  padding: 4px 14px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.pill.green { background: #e0f0e0; color: #2a5f2a; }
+.pill.blue  { background: #e0eef5; color: #1a5070; }
+
+/* ── Tabulka ─────────────────────────────────────────────── */
+.table-wrap {
+  overflow-x: auto;
+  border-radius: 8px;
+  border: 1px solid #e0e8e0;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+thead th {
+  background: #f0f7f0;
+  color: #2a5f2a;
+  font-weight: 700;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  padding: 10px 14px;
+  text-align: left;
+  border-bottom: 2px solid #d0e8d0;
+}
+
+tbody tr { border-bottom: 1px solid #f0f0f0; transition: background .15s; }
+tbody tr:hover { background: #f6fbf6; }
+tbody tr:last-child { border-bottom: none; }
+
+td { padding: 10px 14px; color: #333; }
+
+.td-num { font-weight: 700; color: #1e4a1e; }
+.td-count { font-weight: 600; color: #2a5f2a; }
+.td-count.zero { color: #c0392b; }
+.td-file { font-size: 12px; color: #888; }
+.td-customer { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── Footer karty ────────────────────────────────────────── */
+.card-footer {
+  margin-top: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* ── Utility ─────────────────────────────────────────────── */
+.hidden { display: none !important; }
+
+/* ── Krok 2 styly ────────────────────────────────────────── */
+.section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.match-stats { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.pill.yellow { background: #fff8e0; color: #7a5800; }
+.pill.red    { background: #fde8e8; color: #8b1a1a; }
+
+/* Loading spinner */
+.loading-state {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 30px 0;
+  color: #666;
+  font-size: 14px;
+}
+
+.spinner {
+  width: 22px; height: 22px;
+  border: 3px solid #d0e8d0;
+  border-top-color: #2a5f2a;
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Faktura blok */
+.invoice-block {
+  border: 1px solid #e0e8e0;
+  border-radius: 10px;
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+
+.invoice-block-header {
+  background: #f0f7f0;
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.invoice-block-title {
+  font-weight: 700;
+  font-size: 14px;
+  color: #1e4a1e;
+}
+
+.invoice-block-meta {
+  font-size: 12px;
+  color: #666;
+}
+
+/* Tabulka párování */
+.match-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.match-table th {
+  background: #f8fbf8;
+  color: #2a5f2a;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .4px;
+  padding: 8px 12px;
+  text-align: left;
+  border-bottom: 1px solid #e0e8e0;
+}
+
+.match-table td {
+  padding: 9px 12px;
+  border-bottom: 1px solid #f4f4f4;
+  vertical-align: middle;
+}
+
+.match-table tr:last-child td { border-bottom: none; }
+
+/* Stavové ikonky párování */
+.match-exact  { color: #2a7a2a; font-weight: 600; }
+.match-fuzzy  { color: #7a5800; font-weight: 600; }
+.match-none   { color: #c0392b; font-weight: 600; }
+
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.badge-exact  { background: #e0f4e0; color: #1e6a1e; }
+.badge-fuzzy  { background: #fff3cd; color: #7a5800; }
+.badge-none   { background: #fde8e8; color: #8b1a1a; }
+
+/* Kód pole */
+.code-input {
+  border: 1px solid #cce0cc;
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 13px;
+  width: 130px;
+  font-family: monospace;
+  color: #1e4a1e;
+  background: #f9fbf9;
+}
+
+.code-input:focus {
+  outline: none;
+  border-color: #2a5f2a;
+  background: white;
+}
+
+.code-input.missing {
+  border-color: #e07070;
+  background: #fff5f5;
+}
+
+/* Návrh fuzzy */
+.fuzzy-suggestion {
+  font-size: 11px;
+  color: #7a5800;
+  margin-top: 3px;
+}
+
+.fuzzy-suggestion button {
+  background: none;
+  border: none;
+  color: #2a5f2a;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  text-decoration: underline;
+  padding: 0 2px;
+}
+
+/* Step summary */
+.step-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+
+.btn-link {
+  background: none;
+  border: none;
+  color: #666;
+  cursor: pointer;
+  font-size: 13px;
+  text-decoration: underline;
+  padding: 0;
+}
+
+.btn-link:hover { color: #333; }
+
+/* ── Název v pasu ─────────────────────────────────────────── */
+.passport-name {
+  font-style: italic;
+  color: #1e4a1e;
+  font-size: 13px;
+}
+
+.code-display {
+  font-family: monospace;
+  font-size: 13px;
+  color: #1e4a1e;
+  font-weight: 600;
+}
+
+.fuzzy-code { color: #7a5800; }
+.missing-code { color: #ccc; }
+
+/* ── Fuzzy tlačítka ───────────────────────────────────────── */
+.btn-fuzzy-accept, .btn-fuzzy-reject {
+  background: none; border: none;
+  cursor: pointer; font-size: 11px;
+  font-weight: 600; padding: 0 3px;
+  text-decoration: underline;
+}
+.btn-fuzzy-accept { color: #2a7a2a; }
+.btn-fuzzy-reject { color: #c0392b; }
+
+/* ── Ruční hledání ────────────────────────────────────────── */
+.manual-search {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.manual-input {
+  border: 1px solid #e07070;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 13px;
+  width: 100%;
+  background: #fff5f5;
+  color: #333;
+}
+
+.manual-input:focus {
+  outline: none;
+  border-color: #2a5f2a;
+  background: white;
+}
+
+.btn-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #2a5f2a;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  width: fit-content;
+  transition: background .15s;
+}
+.btn-search:hover { background: #1e4a1e; }
+
+/* Výsledek hledání */
+.search-result { font-size: 12px; }
+
+.srLoading { color: #888; font-style: italic; }
+.srError   { color: #c0392b; }
+
+.sr-found {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  background: #f0f7f0;
+  border: 1px solid #b0d4b0;
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+
+.sr-name { color: #1e4a1e; }
+.sr-name code { background: #e0f0e0; padding: 1px 5px; border-radius: 3px; }
+
+.btn-accept-found {
+  background: #2a5f2a;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn-accept-found:hover { background: #1e4a1e; }
+
+.td-invoice-name { color: #666; font-size: 12px; max-width: 180px; }
+.td-passport-name { min-width: 200px; }
+.td-code { min-width: 150px; }
+
+/* ── Výsledky Krok 1 ─────────────────────────────────────── */
+.results-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 20px 0 12px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.results-header h3 {
+  font-size: 15px;
+  font-weight: 700;
+  color: #1e4a1e;
+}
+
+.summary-pills { display: flex; gap: 8px; }
+
+.table-wrap {
+  overflow-x: auto;
+  border-radius: 8px;
+  border: 1px solid #e0e8e0;
+}
+
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+
+thead th {
+  background: #f0f7f0;
+  color: #2a5f2a;
+  font-weight: 700;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  padding: 10px 14px;
+  text-align: left;
+  border-bottom: 2px solid #d0e8d0;
+}
+
+tbody tr { border-bottom: 1px solid #f0f0f0; transition: background .15s; }
+tbody tr:hover { background: #f6fbf6; }
+tbody tr:last-child { border-bottom: none; }
+td { padding: 10px 14px; color: #333; }
+
+.td-num      { font-weight: 700; color: #1e4a1e; }
+.td-count    { font-weight: 600; color: #2a5f2a; }
+.td-count.zero { color: #c0392b; }
+.td-file     { font-size: 12px; color: #888; }
+.td-customer { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.card-footer {
+  margin-top: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* ── Propagation notice ──────────────────────────────────── */
+.propagation-notice {
+  margin-top: 6px;
+  font-size: 11px;
+  color: #2a5f2a;
+  background: #e8f5e8;
+  border: 1px solid #b8d8b8;
+  border-radius: 4px;
+  padding: 3px 8px;
+  display: inline-block;
+  animation: fadeIn .3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Tlačítko Odebrat duplicity ──────────────────────────── */
+.btn-dedup {
+  background: #fff;
+  color: #2a5f2a;
+  border: 2px solid #2a5f2a;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .2s, color .2s;
+}
+.btn-dedup:hover:not(:disabled) {
+  background: #2a5f2a;
+  color: #fff;
+}
+.btn-dedup:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* ── Tlačítko Přiřadit vše ───────────────────────────────── */
+.btn-assign-all {
+  background: #f2f9f2;
+  color: #2a7a2a;
+  border: 2px solid #2a7a2a;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .2s, color .2s;
+}
+.btn-assign-all:hover:not(:disabled) {
+  background: #2a7a2a;
+  color: #fff;
+}
+.btn-assign-all:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* Badge v záhlaví faktury o odebraných duplikátech */
+.dedup-notice {
+  font-size: 11px;
+  color: #888;
+  background: #f0f0f0;
+  border-radius: 4px;
+  padding: 2px 8px;
+  margin-left: 8px;
+}
+
+/* ── Krok 3 — Generovat ─────────────────────────────────── */
+.gen-stats { display: flex; gap: 10px; margin-bottom: 16px; }
+
+.gen-table {
+  width: 100%; border-collapse: collapse;
+  font-size: 13px; margin-bottom: 16px;
+}
+.gen-table thead tr { background: #2a5f2a; color: white; }
+.gen-table th { padding: 10px 14px; text-align: left; font-weight: 600; }
+.gen-table td { padding: 9px 14px; border-bottom: 1px solid #e8e8e8; }
+.gen-table tbody tr:hover { background: #f6fbf6; }
+
+.gen-success {
+  background: #e8f5e8; border: 1px solid #a8d8a8;
+  border-radius: 8px; padding: 16px 20px;
+  color: #1a4a1a; font-size: 14px; line-height: 1.6;
+}
+.gen-error {
+  background: #fdf0f0; border: 1px solid #f5b8b8;
+  border-radius: 8px; padding: 16px 20px;
+  color: #8b0000; font-size: 14px;
+}
+
+/* ── Kandidátní výběr (pick-list) ─────────────────────────── */
+.fuzzy-suggestion .reason {
+  color: #7a5800;
+  font-size: 12px;
+  margin-right: 6px;
+}
+
+.cand-list {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 6px 0 0;
+  border-top: 1px dashed #d8e4d8;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.btn-cand {
+  background: #2a5f2a;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  padding: 3px 9px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.btn-cand:hover { background: #1e4a1e; }
+
+.cand-name { font-style: italic; color: #1e4a1e; }
+.cand-code { background: #e0f0e0; padding: 1px 5px; border-radius: 3px; font-family: monospace; }
+.cand-meta { color: #999; font-size: 11px; }

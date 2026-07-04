@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>🌿 Rostlinolékařské pasy</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+  <header>
+    <div class="header-inner">
+      <span class="logo">🌿</span>
+      <div>
+        <h1>Rostlinolékařské pasy</h1>
+        <p class="subtitle">Generátor RL pasů z faktur</p>
+      </div>
+    </div>
+    <nav class="steps">
+      <div class="step active" id="step-nav-1"><span class="step-num">1</span>Načíst faktury</div>
+      <div class="step-arrow">›</div>
+      <div class="step" id="step-nav-2"><span class="step-num">2</span>Přiřadit kódy</div>
+      <div class="step-arrow">›</div>
+      <div class="step" id="step-nav-3"><span class="step-num">3</span>Generovat pasy</div>
+      <div class="step-arrow">›</div>
+      <div class="step" id="step-nav-4"><span class="step-num">4</span>Google Drive</div>
+    </nav>
+  </header>
+
+  <main>
+
+    <!-- ── KROK 1: Upload ───────────────────────────────── -->
+    <section class="card" id="section-upload">
+      <h2>Krok 1 — Nahrát faktury (PDF)</h2>
+      <p class="hint">Vyber jeden nebo více PDF souborů s fakturami.</p>
+
+      <div class="drop-zone" id="drop-zone">
+        <div class="drop-icon">📂</div>
+        <p class="drop-title">Přetáhni PDF soubory sem</p>
+        <p class="drop-sub">nebo</p>
+        <label class="btn-primary" for="file-input">Vybrat soubory</label>
+        <input type="file" id="file-input" multiple accept=".pdf" hidden />
+      </div>
+
+      <div id="file-list" class="file-list hidden"></div>
+
+      <div id="progress-wrap" class="progress-wrap hidden">
+        <div class="progress-bar-bg">
+          <div class="progress-bar-fill" id="progress-bar"></div>
+        </div>
+        <span id="progress-text">Načítám…</span>
+      </div>
+
+      <!-- Tabulka načtených faktur -->
+      <div id="invoice-results" class="hidden">
+        <div class="results-header">
+          <h3>Načtené faktury</h3>
+          <div class="summary-pills">
+            <span class="pill green" id="pill-invoices">0 faktur</span>
+            <span class="pill blue"  id="pill-plants">0 rostlin</span>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table id="invoice-table">
+            <thead>
+              <tr>
+                <th>Faktura č.</th>
+                <th>Odběratel</th>
+                <th>Datum</th>
+                <th>Rostliny</th>
+                <th>Soubor</th>
+              </tr>
+            </thead>
+            <tbody id="invoice-tbody"></tbody>
+          </table>
+        </div>
+
+        <div class="card-footer">
+          <button class="btn-secondary" id="btn-reset">↩ Načíst jiné soubory</button>
+          <button class="btn-primary"   id="btn-to-step2">Přiřadit kódy →</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── KROK 2: Párování ─────────────────────────────── -->
+    <section class="card hidden" id="section-match">
+      <div class="section-header">
+        <h2>Krok 2 — Přiřazení kódů vysledovatelnosti</h2>
+        <div id="match-stats" class="match-stats hidden">
+          <span class="pill green"  id="stat-exact">0 přesných</span>
+          <span class="pill yellow" id="stat-fuzzy">0 návrhů</span>
+          <span class="pill red"    id="stat-none">0 nenalezeno</span>
+        </div>
+      </div>
+      <p class="hint">Každé rostlině byl přiřazen kód ze šarže. Zkontroluj a oprav případné nesrovnalosti.</p>
+
+      <div id="match-loading" class="loading-state">
+        <div class="spinner"></div>
+        <span>Párování probíhá…</span>
+      </div>
+
+      <div id="match-invoices" class="match-invoices hidden"></div>
+
+      <div class="card-footer">
+        <button class="btn-secondary" id="btn-back-to-1">← Zpět</button>
+        <button class="btn-assign-all" id="btn-assign-all" disabled title="Potvrdí nejlepší návrh u všech nepotvrzených shod">
+          ✓ Přiřadit vše
+        </button>
+        <button class="btn-dedup"     id="btn-dedup" disabled title="Odstraní duplicitní rostliny v rámci každé faktury">
+          🗂 Odebrat duplicity
+        </button>
+        <button class="btn-primary"   id="btn-to-step3" disabled>Generovat pasy →</button>
+      </div>
+    </section>
+
+    <!-- ── KROK 3: Generovat pasy ───────────────────────── -->
+    <section class="card hidden" id="section-generate">
+      <h2>Krok 3 — Generovat pasy</h2>
+      <p class="hint">Přehled schválených rostlin. Klikni na tlačítko a stáhni Excel soubor.</p>
+
+      <div id="generate-summary" class="generate-summary"></div>
+
+      <div id="generate-loading" class="loading-state" style="display:none">
+        <div class="spinner"></div>
+        <span>Generuji Excel…</span>
+      </div>
+
+      <div id="generate-result" class="generate-result hidden"></div>
+
+      <div class="card-footer">
+        <button class="btn-secondary" id="btn-back-to-2">← Zpět</button>
+        <button class="btn-secondary" id="btn-generate-excel">⬇ Stáhnout Excel</button>
+        <button class="btn-primary"   id="btn-generate-pdf">⬇ Generovat PDF (ZIP)</button>
+      </div>
+    </section>
+
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
