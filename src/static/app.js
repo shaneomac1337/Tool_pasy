@@ -645,7 +645,7 @@ btnGenerateExcel.addEventListener('click', async () => {
     generateResult.innerHTML = `
       <div class="gen-success">
         ✓ Excel úspěšně vygenerován a stažen: <strong>${filename}</strong><br>
-        <small>Soubor je také uložen ve složce <code>Tool_pasy/výstupy/</code></small>
+        <small>Soubor je také uložen ve složce <code>výstupy/</code></small>
       </div>`;
     generateResult.classList.remove('hidden');
     btnUploadDrive.disabled = false;
@@ -695,7 +695,7 @@ btnGeneratePdf.addEventListener('click', async () => {
     generateResult.innerHTML = `
       <div class="gen-success">
         ✓ PDF pasy úspěšně vygenerovány a staženy: <strong>${filename}</strong><br>
-        <small>Soubory jsou také uloženy ve složce <code>Tool_pasy/výstupy/</code></small>
+        <small>Soubory jsou také uloženy ve složce <code>výstupy/</code></small>
       </div>`;
     generateResult.classList.remove('hidden');
     btnUploadDrive.disabled = false;
