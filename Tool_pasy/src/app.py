@@ -9,13 +9,14 @@ from passport_generator import generate_excel
 from pdf_generator import build_outputs, zip_outputs
 from drive_uploader import get_status, upload_outputs
 from session import session
+from paths import DATA_DIR, OUTPUT_DIR
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 200 * 1024 * 1024
 
 parser = PDFParser()
 
-SARZE_PATH = Path(__file__).parent / 'data' / 'sarze.xlsx'
+SARZE_PATH = DATA_DIR / 'sarze.xlsx'
 matcher = PlantMatcher(str(SARZE_PATH))
 print(f"✓ Šarže načtena: {len(matcher.entries)} rostlin")
 
@@ -118,7 +119,7 @@ def generate_excel_route():
     if error:
         return error
 
-    output_dir = Path(__file__).parent / 'výstupy'
+    output_dir = OUTPUT_DIR
     try:
         excel_path = generate_excel(invoices, output_dir)
     except Exception as e:
@@ -143,8 +144,7 @@ def generate_pdf_route():
     if error:
         return error
 
-    out_dir = (Path(__file__).parent / 'výstupy'
-               / f"pasy_{date.today().isoformat()}")
+    out_dir = OUTPUT_DIR / f"pasy_{date.today().isoformat()}"
     try:
         result = build_outputs(
             invoices,

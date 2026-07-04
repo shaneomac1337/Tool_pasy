@@ -23,22 +23,14 @@ if str(APP_DIR) not in sys.path:
     sys.path.insert(0, str(APP_DIR))
 
 from plant_matcher import PlantMatcher  # noqa: E402
+from paths import DATA_DIR  # noqa: E402
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────
 @pytest.fixture(scope="module")
 def matcher():
-    """One matcher for the whole module, built against the real shipped DB.
-
-    chdir into the app dir so ``PlantMatcher('data/sarze.xlsx')`` resolves the
-    relative path; restore the original cwd afterwards.
-    """
-    prev = os.getcwd()
-    os.chdir(APP_DIR)
-    try:
-        yield PlantMatcher("data/sarze.xlsx")
-    finally:
-        os.chdir(prev)
+    """One matcher for the whole module, built against the real shipped DB."""
+    return PlantMatcher(str(DATA_DIR / "sarze.xlsx"))
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────

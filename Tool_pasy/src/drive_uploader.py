@@ -7,13 +7,10 @@ Import modulu nikdy nesmí selhat ani mít vedlejší efekty (síť, zápis soub
 — Google knihovny se importují líně uvnitř funkcí.
 """
 import json
-from pathlib import Path
 
-CREDENTIALS_PATH = Path(__file__).parent / 'credentials.json'
-TOKEN_PATH = Path(__file__).parent / 'token.json'
-CONFIG_PATH = Path(__file__).parent / 'drive_config.json'
+from paths import CREDENTIALS_PATH, TOKEN_PATH, CONFIG_PATH, OUTPUT_DIR as OUTPUT_BASE
+
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
-OUTPUT_BASE = Path(__file__).parent / 'výstupy'
 
 _MIMETYPES = {
     '.pdf': 'application/pdf',

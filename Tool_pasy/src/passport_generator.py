@@ -7,6 +7,8 @@ from openpyxl.drawing.image import Image as XLImage
 from pathlib import Path
 from datetime import date
 
+from paths import ASSETS_DIR
+
 
 # EU vlajka zakódovaná jako base64 – nevyžaduje žádný externí soubor
 _EU_FLAG_B64 = (
@@ -43,7 +45,7 @@ _EU_FLAG_B64 = (
 def _get_flag_image_path() -> str:
     """Vrátí cestu k souboru s EU vlajkou.
     Preferuje eu_flag.png vedle tohoto souboru, jinak použije base64 zálohu."""
-    local_flag = Path(__file__).parent / 'eu_flag.png'
+    local_flag = ASSETS_DIR / 'eu_flag.png'
     if local_flag.exists():
         return str(local_flag)
     # záloha: dekóduj z base64 do dočasného souboru
@@ -88,7 +90,7 @@ def generate_excel(invoices: list, output_dir: Path) -> Path:
     wb.save(str(output_path))
 
     # Clean up temp flag file (pouze pokud jsme vytvořili dočasný soubor, ne eu_flag.png)
-    local_flag = str(Path(__file__).parent / 'eu_flag.png')
+    local_flag = str(ASSETS_DIR / 'eu_flag.png')
     if flag_path != local_flag:
         try:
             import os
