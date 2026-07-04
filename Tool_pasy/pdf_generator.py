@@ -4,7 +4,7 @@ Vykreslí rostlinolékařský pas (reportlab) a sloučí ho před stránky
 původní faktury (pypdf). Výstup: {číslo}.pdf per faktura + recipients.xlsx.
 """
 import io
-import zipfile  # noqa: F401  (re-exported convenience for app.py)
+import zipfile
 from pathlib import Path
 
 import openpyxl
@@ -202,3 +202,13 @@ def build_outputs(final_invoices: list, parsed_index: dict,
         files.append(warn_path)
 
     return {'dir': output_dir, 'files': files, 'warnings': warnings}
+
+
+def zip_outputs(files: list) -> io.BytesIO:
+    """Zabalí vygenerované soubory do ZIP v paměti (buffer na pozici 0)."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+        for path in files:
+            zf.write(path, arcname=path.name)
+    buf.seek(0)
+    return buf

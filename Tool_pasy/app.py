@@ -1,15 +1,14 @@
 import os
-import io
 import tempfile
-import zipfile
 from datetime import date
 from pathlib import Path
 from flask import Flask, render_template, request, jsonify, send_file
 from pdf_parser import PDFParser
 from plant_matcher import PlantMatcher
 from passport_generator import generate_excel
-from pdf_generator import build_outputs
+from pdf_generator import build_outputs, zip_outputs
 from drive_uploader import get_status, upload_outputs
+from session import session
 
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 200 * 1024 * 1024
@@ -23,9 +22,6 @@ print(f"✓ Šarže načtena: {len(matcher.entries)} rostlin")
 UPLOAD_TMP = Path(tempfile.gettempdir()) / "rl_pasy_uploads"
 UPLOAD_TMP.mkdir(exist_ok=True)
 
-_session_invoices = []
-_session_file_paths: dict = {}
-
 
 @app.route('/')
 def index():
@@ -34,7 +30,6 @@ def index():
 
 @app.route('/api/parse', methods=['POST'])
 def parse_pdfs():
-    global _session_invoices
     if 'files' not in request.files:
         return jsonify({'error': 'Žádné soubory nebyly nahrány'}), 400
 
@@ -44,14 +39,15 @@ def parse_pdfs():
         return jsonify({'error': 'Žádné PDF soubory nenalezeny'}), 400
 
     saved_paths = []
+    file_paths = {}
     for f in pdf_files:
         tmp_path = UPLOAD_TMP / f.filename
         f.save(str(tmp_path))
         saved_paths.append(str(tmp_path))
-        _session_file_paths[f.filename] = str(tmp_path)
+        file_paths[f.filename] = str(tmp_path)
 
     invoices = parser.parse_files(saved_paths)
-    _session_invoices = invoices
+    session.save(invoices, file_paths)
 
     return jsonify({
         'invoices':         [inv.to_dict() for inv in invoices],
@@ -63,14 +59,13 @@ def parse_pdfs():
 
 @app.route('/api/match', methods=['POST'])
 def match_plants():
-    global _session_invoices
-    if not _session_invoices:
+    if not session.invoices():
         return jsonify({'error': 'Nejdřív nahraj faktury'}), 400
 
     result = []
     stats = {'exact': 0, 'fuzzy': 0, 'none': 0}
 
-    for inv in _session_invoices:
+    for inv in session.invoices():
         plants_raw = [p.to_dict() for p in inv.plants]
         matched    = matcher.match_invoice_plants(plants_raw)
         for p in matched:
@@ -102,19 +97,26 @@ def search_plant():
     return jsonify(result)
 
 
+def _validated_invoices():
+    """Vrátí (invoices, None), nebo (None, chybová odpověď) při špatném těle."""
+    data = request.get_json()
+    if not data or 'invoices' not in data:
+        return None, (jsonify({'error': 'Chybí data faktur'}), 400)
+    invoices = data['invoices']
+    if not invoices:
+        return None, (jsonify({'error': 'Žádné faktury k exportu'}), 400)
+    return invoices, None
+
+
 @app.route('/api/generate-excel', methods=['POST'])
 def generate_excel_route():
     """
     Přijme finální data z frontendu a vygeneruje Excel s pasy.
     Body: { "invoices": [ { "number", "customer", "date", "plants": [...] } ] }
     """
-    data = request.get_json()
-    if not data or 'invoices' not in data:
-        return jsonify({'error': 'Chybí data faktur'}), 400
-
-    invoices = data['invoices']
-    if not invoices:
-        return jsonify({'error': 'Žádné faktury k exportu'}), 400
+    invoices, error = _validated_invoices()
+    if error:
+        return error
 
     output_dir = Path(__file__).parent / 'výstupy'
     try:
@@ -137,31 +139,23 @@ def generate_pdf_route():
     recipients.xlsx. Kopie zůstává ve výstupy/pasy_{datum}/.
     Body: { "invoices": [ { "number", "customer", "date", "plants": [...] } ] }
     """
-    data = request.get_json()
-    if not data or 'invoices' not in data:
-        return jsonify({'error': 'Chybí data faktur'}), 400
-
-    invoices = data['invoices']
-    if not invoices:
-        return jsonify({'error': 'Žádné faktury k exportu'}), 400
+    invoices, error = _validated_invoices()
+    if error:
+        return error
 
     out_dir = (Path(__file__).parent / 'výstupy'
                / f"pasy_{date.today().isoformat()}")
     try:
         result = build_outputs(
             invoices,
-            {inv.number: inv for inv in _session_invoices},
-            _session_file_paths,
+            session.index_by_number(),
+            session.file_paths(),
             out_dir
         )
     except Exception as e:
         return jsonify({'error': f'Chyba při generování: {e}'}), 500
 
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
-        for path in result['files']:
-            zf.write(path, arcname=path.name)
-    buf.seek(0)
+    buf = zip_outputs(result['files'])
 
     return send_file(
         buf,
