@@ -4,6 +4,7 @@ from datetime import date, datetime
 import threading
 import uuid
 from pathlib import Path
+import openpyxl
 from flask import Flask, render_template, request, jsonify, send_file
 from pdf_parser import PDFParser
 from plant_matcher import PlantMatcher
@@ -99,6 +100,27 @@ def search_plant():
 
     result = matcher.search_by_name(query)
     return jsonify(result)
+
+
+@app.route('/api/add-sarze', methods=['POST'])
+def add_sarze():
+    """Přidá novou položku do šarže (data/sarze.xlsx) a obnoví matcher."""
+    global matcher
+    data    = request.get_json() or {}
+    name    = (data.get('name') or '').strip()
+    code    = (data.get('code') or '').strip()
+    country = (data.get('country') or '').strip() or 'CZ'
+    if not name or not code:
+        return jsonify({'error': 'Název i kód jsou povinné'}), 400
+
+    # ponytail: bez zámku souboru — lokální nástroj pro jednoho uživatele;
+    # při víceuživatelském provozu doplnit per-file zámek.
+    wb = openpyxl.load_workbook(SARZE_PATH)
+    wb.active.append([name, code, country])
+    wb.save(SARZE_PATH)
+
+    matcher = PlantMatcher(str(SARZE_PATH))
+    return jsonify(matcher.search_by_name(name))
 
 
 def _validated_invoices():

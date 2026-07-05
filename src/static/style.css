@@ -770,6 +770,29 @@ td { padding: 10px 14px; color: #333; }
 .cand-code { background: #e0f0e0; padding: 1px 5px; border-radius: 3px; font-family: monospace; }
 .cand-meta { color: #999; font-size: 11px; }
 
+/* ── Přidání do šarže ────────────────────────────────────── */
+.btn-add-sarze {
+  background: none;
+  border: 1px dashed #2a5f2a;
+  color: #2a5f2a;
+  border-radius: 6px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  width: fit-content;
+}
+.btn-add-sarze:hover { background: #f0f7f0; }
+
+.add-sarze-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-left: 3px solid #2a5f2a;
+  padding-left: 8px;
+}
+.add-sarze-form.hidden { display: none; }
+
 /* ── Vyřazené položky (audit filtru nerostlinných řádků) ───── */
 .excluded-lines {
   margin-top: 6px;

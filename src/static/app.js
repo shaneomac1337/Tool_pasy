@@ -347,8 +347,49 @@ function buildManualSearch(invNum, idx, prefill) {
              onkeydown="if(event.key==='Enter'){event.preventDefault();doManualSearch('${invNum}',${idx});}"
              id="minput-${invNum}-${idx}" />
       <button class="btn-search" onclick="doManualSearch('${invNum}',${idx})">🔍 Hledat</button>
+      <button class="btn-add-sarze" onclick="toggleAddSarze('${invNum}',${idx})">+ Přidat do šarže</button>
+      <div class="add-sarze-form hidden" id="saddform-${invNum}-${idx}">
+        <input type="text" class="manual-input" placeholder="Název rostliny"
+               value="${esc(prefill || '')}" id="saddname-${invNum}-${idx}" />
+        <input type="text" class="manual-input" placeholder="Kód šarže"
+               onkeydown="if(event.key==='Enter'){event.preventDefault();doAddSarze('${invNum}',${idx});}"
+               id="saddcode-${invNum}-${idx}" />
+        <button class="btn-search" onclick="doAddSarze('${invNum}',${idx})">✓ Přidat</button>
+      </div>
       <div class="search-result" id="sresult-${invNum}-${idx}"></div>
     </div>`;
+}
+
+/** Zobrazí/skryje formulář pro přidání nové položky do šarže. */
+function toggleAddSarze(invNum, idx) {
+  document.getElementById(`saddform-${invNum}-${idx}`).classList.toggle('hidden');
+}
+
+/** Přidá položku do šarže a aplikuje vrácenou shodu na řádek (stejná cesta jako ruční hledání). */
+async function doAddSarze(invNum, idx) {
+  const name     = document.getElementById(`saddname-${invNum}-${idx}`).value.trim();
+  const code     = document.getElementById(`saddcode-${invNum}-${idx}`).value.trim();
+  const resultEl = document.getElementById(`sresult-${invNum}-${idx}`);
+  if (!name || !code) { resultEl.innerHTML = '<span class="srError">Vyplň název i kód.</span>'; return; }
+
+  resultEl.innerHTML = '<span class="srLoading">Přidávám do šarže…</span>';
+  try {
+    const res  = await fetch('/api/add-sarze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, code })
+    });
+    const data = await res.json();
+    if (!res.ok) { resultEl.innerHTML = `<span class="srError">✗ ${data.error || 'Chyba'}</span>`; return; }
+    if (data.match_type === 'none' || !data.passport_name) {
+      resultEl.innerHTML = '<span class="srError">✗ Přidáno do šarže, ale název nelze spárovat (po normalizaci je prázdný) — oprav ho v data/sarze.xlsx.</span>';
+      return;
+    }
+    resultEl.innerHTML = '';
+    acceptManual(invNum, idx, data.passport_name, data.code, data.country);
+  } catch (e) {
+    resultEl.innerHTML = `<span class="srError">Chyba: ${e.message}</span>`;
+  }
 }
 
 const LEVEL_LABEL = { exact: 'přesná', species: 'druh', genus: 'rod', fuzzy: 'fuzzy' };
