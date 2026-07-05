@@ -1,0 +1,62 @@
+name: Build portable (Windows + macOS)
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write        # potřeba pro vytvoření Release při push tagu
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false   # selhání jednoho OS nezruší build druhého
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: Pasy-windows
+            zipfile: Pasy-windows.zip
+          - os: macos-latest
+            artifact: Pasy-macos
+            zipfile: Pasy-macos.zip
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller==6.21.0
+
+      - name: Build (PyInstaller onedir)
+        run: pyinstaller pasy.spec
+
+      - name: Zip portable folder (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -Path dist/Pasy -DestinationPath Pasy-windows.zip
+
+      - name: Zip portable folder (macOS)
+        if: runner.os == 'macOS'
+        run: ditto -c -k --sequesterRsrc --keepParent dist/Pasy Pasy-macos.zip
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.zipfile }}
+
+      - name: Attach to Release (tag builds only)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ matrix.zipfile }}

@@ -17,3 +17,8 @@ __MACOSX/
 credentials.json
 token.json
 drive_config.json
+# PyInstaller build output
+build/
+dist/
+Pasy-windows.zip
+Pasy-macos.zip

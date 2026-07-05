@@ -4,6 +4,7 @@ Vykreslí rostlinolékařský pas (reportlab) a sloučí ho před stránky
 původní faktury (pypdf). Výstup: {číslo}.pdf per faktura + recipients.xlsx.
 """
 import io
+import sys
 import zipfile
 from pathlib import Path
 
@@ -19,20 +20,19 @@ from reportlab.lib.utils import ImageReader
 from passport_generator import _get_flag_image_path
 
 
+# Přibalený DejaVu font (čeština) — hledán ve frozen bundlu (sys._MEIPASS)
+# i ve vývoji (assets/ v kořeni). reportlab žádný DejaVu nemá (jen Vera bez
+# ě/ř/ů/ť/ň), proto ho přibalujeme sami — funguje na Windows i macOS.
+_BUNDLE_ASSETS = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parent.parent)) / 'assets'
+
+
 def _register_fonts() -> None:
     """Registruje font s českou diakritikou. Nikdy nespadne na Helveticu."""
     candidates = [
-        (r'C:\Windows\Fonts\arial.ttf', r'C:\Windows\Fonts\arialbd.ttf'),
+        (r'C:\Windows\Fonts\arial.ttf', r'C:\Windows\Fonts\arialbd.ttf'),   # Windows
+        (str(_BUNDLE_ASSETS / 'DejaVuSans.ttf'),
+         str(_BUNDLE_ASSETS / 'DejaVuSans-Bold.ttf')),                       # přibalený (macOS aj.)
     ]
-    # záloha: DejaVu přibalené v reportlab
-    try:
-        import reportlab
-        rl_fonts = Path(reportlab.__file__).parent / 'fonts'
-        candidates.append((str(rl_fonts / 'DejaVuSans.ttf'),
-                           str(rl_fonts / 'DejaVuSans-Bold.ttf')))
-    except Exception:
-        pass
-
     for regular, bold in candidates:
         if Path(regular).exists() and Path(bold).exists():
             pdfmetrics.registerFont(TTFont('Arial', regular))

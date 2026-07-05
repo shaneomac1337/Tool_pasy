@@ -343,8 +343,3 @@ def debug_tables():
 
     return jsonify({'pages': pages_data})
 
-
-if __name__ == '__main__':
-    print("\n🌿 Rostlinolékařské pasy — spouštím server...")
-    print("👉  Otevři prohlížeč na: http://localhost:5001\n")
-    app.run(debug=True, port=5001)
