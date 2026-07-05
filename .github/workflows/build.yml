@@ -2,12 +2,17 @@ name: Build portable (Windows + macOS)
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release tag (e.g. v1.0.0) — a Release with this tag is created/updated'
+        required: true
+        default: v0.0.0
   push:
     tags:
       - 'v*'
 
 permissions:
-  contents: write        # potřeba pro vytvoření Release při push tagu
+  contents: write        # potřeba pro vytvoření Release
 
 jobs:
   build:
@@ -55,8 +60,21 @@ jobs:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.zipfile }}
 
-      - name: Attach to Release (tag builds only)
-        if: startsWith(github.ref, 'refs/tags/')
+  release:
+    # Publikuj Release při manuálním spuštění (workflow_dispatch) i při push tagu v*.
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts          # -> artifacts/Pasy-windows/Pasy-windows.zip, artifacts/Pasy-macos/Pasy-macos.zip
+
+      - name: Publish Release with both zips
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ matrix.zipfile }}
+          tag_name: ${{ github.event.inputs.version || github.ref_name }}
+          name: ${{ github.event.inputs.version || github.ref_name }}
+          files: artifacts/**/*.zip
+          generate_release_notes: true

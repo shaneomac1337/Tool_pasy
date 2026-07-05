@@ -371,21 +371,21 @@ coll = COLLECT(
 
 ---
 
-### Slice 4 — GitHub Actions matrix workflow `.github/workflows/build.yml`
+### Slice 4 — GitHub Actions build + release workflow `.github/workflows/build.yml`
 
 **File:** `.github/workflows/build.yml` (new). The `.github/workflows/` directory is currently empty — this is the first workflow.
 
-**Kind:** shared-refined (Windows + macOS). **One job, one `strategy.matrix`** over `windows-latest` + `macos-latest`. The install/build steps are identical across OSes (DRY); the workflow forks **only** at the zip step (Windows `Compress-Archive` needs pwsh; macOS needs `ditto`) and at the artifact/zip names. A second job was rejected: it would duplicate the four identical setup/install/build steps for no gain. `fail-fast: false` so one OS's failure doesn't cancel the other.
+**Kind:** shared-refined (Windows + macOS). **Two jobs:** a `build` matrix over `windows-latest` + `macos-latest` (identical steps, forking only at the zip step — Windows `Compress-Archive` needs pwsh, macOS needs `ditto`), then a single `release` job (`needs: build`, on `ubuntu-latest`) that downloads both zips and publishes one GitHub Release. Splitting release into its own job — rather than attaching it to each matrix leg — avoids two runners racing to create the same Release. `fail-fast: false` so one OS's failure doesn't cancel the other.
 
 **Why:**
 - `matrix: [windows-latest, macos-latest]` — Windows produces the `.exe` folder; `macos-latest` (Apple Silicon / arm64) produces the unix-exe folder. `setup-python@v5` provides an arm64 Python on the macOS runner, so the installed wheels match the arm64 build.
 - Pin `python-version: '3.12'` for reproducibility and broad wheel availability (pdfplumber, reportlab, google libs, Pillow all ship 3.12 wheels on both OSes/arches). The built launcher embeds its own Python; recipients need nothing installed. (Local dev builds use whatever Python is installed — 3.14.6 here — which is fine.)
 - Pin `pyinstaller==6.21.0` to match the spec's 6.x assumptions and local builds.
-- Trigger on `workflow_dispatch` (manual) and on version tags `v*`. On a tag, also create a GitHub Release and attach both zips.
+- **Triggers + release:** `workflow_dispatch` (manual, with a required `version` input like `v1.0.0`) **and** version tags `v*`. The `release` job runs on **either** (`if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')`), so a **manual run also publishes a Release** — its tag is the `version` input; a tag push uses the pushed tag (`github.ref_name`). `softprops/action-gh-release@v2` creates the tag/Release if missing and updates it if it already exists.
 - **Zip step, Windows:** `Compress-Archive -Path dist/Pasy` (pwsh) — archives the folder so extraction yields a `Pasy/` folder.
 - **Zip step, macOS:** `ditto -c -k --sequesterRsrc --keepParent dist/Pasy Pasy-macos.zip`. `ditto` (not `zip`) preserves the **executable bit** on `Pasy` and the **symlinks** PyInstaller may place in `_internal/` (e.g. framework `Versions/Current`); plain `zip` can drop the exec bit and dereference symlinks, producing a broken download. `--keepParent` puts a top-level `Pasy/` folder in the archive (matching Windows); `--sequesterRsrc` stores resource-fork/metadata safely; `-c -k` = create a PKZip archive.
 - `credentials.json`/`token.json`/`drive_config.json` are gitignored and user-supplied — they are never in the checkout and the spec does not reference them, so they cannot be bundled on either OS.
-- **Artifact names:** `Pasy-windows` / `Pasy-macos` (upload-artifact v4 requires unique names — the matrix provides them). **Zip files:** `Pasy-windows.zip` / `Pasy-macos.zip`, both attached to the tag Release. `softprops/action-gh-release@v2` runs on each matrix leg and is idempotent on the tag — the first leg creates the Release, the second updates it, so both zips end up attached.
+- **Artifacts + release assets:** each build leg uploads `Pasy-windows` / `Pasy-macos` (upload-artifact v4 needs unique names — the matrix provides them). The `release` job `download-artifact`s **all** of them into `artifacts/<name>/`, then attaches `artifacts/**/*.zip` (both zips) to one Release with `generate_release_notes: true`. `credentials.json`/`token.json`/`drive_config.json` are gitignored and not referenced by the spec, so they're never in the checkout or the zips.
 
 **Exact `.github/workflows/build.yml` contents (copy-paste verbatim):**
 
@@ -394,12 +394,17 @@ name: Build portable (Windows + macOS)
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release tag (e.g. v1.0.0) — a Release with this tag is created/updated'
+        required: true
+        default: v0.0.0
   push:
     tags:
       - 'v*'
 
 permissions:
-  contents: write        # potřeba pro vytvoření Release při push tagu
+  contents: write        # potřeba pro vytvoření Release
 
 jobs:
   build:
@@ -447,19 +452,32 @@ jobs:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.zipfile }}
 
-      - name: Attach to Release (tag builds only)
-        if: startsWith(github.ref, 'refs/tags/')
+  release:
+    # Publikuj Release při manuálním spuštění (workflow_dispatch) i při push tagu v*.
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts          # -> artifacts/Pasy-windows/Pasy-windows.zip, artifacts/Pasy-macos/Pasy-macos.zip
+
+      - name: Publish Release with both zips
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ matrix.zipfile }}
+          tag_name: ${{ github.event.inputs.version || github.ref_name }}
+          name: ${{ github.event.inputs.version || github.ref_name }}
+          files: artifacts/**/*.zip
+          generate_release_notes: true
 ```
 
 **Acceptance criteria:**
-- A `workflow_dispatch` run builds **both** legs: `windows-latest` uploads a `Pasy-windows` artifact containing `Pasy-windows.zip`, and `macos-latest` uploads a `Pasy-macos` artifact containing `Pasy-macos.zip`.
-- Pushing a tag `vX.Y.Z` runs both legs **and** creates a single GitHub Release with **both** `Pasy-windows.zip` and `Pasy-macos.zip` attached.
+- A **manual** `workflow_dispatch` run (version e.g. `v1.0.0`) builds both legs **and** creates/updates a GitHub Release tagged `v1.0.0` with **both** `Pasy-windows.zip` + `Pasy-macos.zip` attached — no tag push needed.
+- A tag push `vX.Y.Z` does the same, using the pushed tag as the Release tag.
 - `Pasy-windows.zip` extracts to a `Pasy/` folder containing `Pasy.exe` + `_internal/`. `Pasy-macos.zip` extracts to a `Pasy/` folder containing an executable `Pasy` (exec bit intact) + `_internal/` (symlinks intact).
 - Neither zip contains `credentials.json`/`token.json`/`drive_config.json`.
-- `fail-fast: false` verified: forcing one leg to fail does not cancel the other leg.
+- `fail-fast: false`: forcing one build leg to fail does not cancel the other; the `release` job runs only after both build legs succeed.
 
 ---
 
