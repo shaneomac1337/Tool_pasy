@@ -31,6 +31,8 @@ class Invoice:
     source_page: int = 0
     email: str = ""
     source_pages: List[int] = field(default_factory=list)
+    # Řádky vyřazené filtrem nerostlinných položek: {'text', 'keyword'}
+    excluded: List[dict] = field(default_factory=list)
 
     def to_dict(self):
         return {
@@ -42,7 +44,8 @@ class Invoice:
             'source_file': self.source_file,
             'source_page': self.source_page,
             'email': self.email,
-            'source_pages': self.source_pages
+            'source_pages': self.source_pages,
+            'excluded': self.excluded
         }
 
 
@@ -90,7 +93,9 @@ class PDFParser:
                         # Continuation page: extra items, no customer block
                         current.source_pages.append(page_num + 1)
                         for table in page.extract_tables():
-                            current.plants.extend(self._parse_items(table))
+                            items, dropped = self._parse_items(table)
+                            current.plants.extend(items)
+                            current.excluded.extend(dropped)
                     # else: cover/blank page before first invoice — skip
                 except Exception as e:
                     print(f"  Stránka {page_num+1}: {e}")
@@ -116,10 +121,11 @@ class PDFParser:
         email = em.group(1) if em else ""
 
         plants = []
+        excluded = []
         if len(tables) >= 2:
-            plants = self._parse_items(tables[1])
+            plants, excluded = self._parse_items(tables[1])
         elif len(tables) == 1:
-            plants = self._parse_items(tables[0])
+            plants, excluded = self._parse_items(tables[0])
 
         return Invoice(
             number=m.group(1),
@@ -128,7 +134,8 @@ class PDFParser:
             plants=plants,
             source_file=source_file,
             source_page=page_num,
-            email=email
+            email=email,
+            excluded=excluded
         )
 
     def _get_customer(self, tables: list) -> str:
@@ -146,7 +153,7 @@ class PDFParser:
                             return line
         return ""
 
-    def _parse_items(self, table: list) -> List[PlantItem]:
+    def _parse_items(self, table: list):
         """
         Struktura tabulky (4 sloupce):
           row[0] = "() Název rostliny ..."  — kód a název dohromady
@@ -154,8 +161,10 @@ class PDFParser:
           row[2] = cena / ks
           row[3] = celkem
         Rostlinné řádky začínají row[0] řetězcem "() ".
+        Vrací (rostliny, vyřazené řádky) — vyřazené kvůli auditu.
         """
         plants = []
+        excluded = []
         for row in table:
             if not row or len(row) < 2:
                 continue
@@ -171,7 +180,9 @@ class PDFParser:
             if not raw_name or len(raw_name) < 3:
                 continue
 
-            if self._is_non_plant(raw_name):
+            kw = self._non_plant_keyword(raw_name)
+            if kw:
+                excluded.append({'text': raw_name, 'keyword': kw})
                 continue
 
             clean = self._clean_name(raw_name)
@@ -205,11 +216,12 @@ class PDFParser:
                 name=clean, quantity=qty,
                 unit_price=price, raw_name=raw_name
             ))
-        return plants
+        return plants, excluded
 
-    def _is_non_plant(self, name: str) -> bool:
+    def _non_plant_keyword(self, name: str) -> Optional[str]:
+        """Vrátí klíčové slovo, kvůli kterému je řádek nerostlinný, jinak None."""
         nl = name.lower()
-        return any(kw in nl for kw in self.NON_PLANT_KEYWORDS)
+        return next((kw for kw in self.NON_PLANT_KEYWORDS if kw in nl), None)
 
     def _clean_name(self, name: str) -> str:
         name = re.sub(r'\s+', ' ', name).strip()

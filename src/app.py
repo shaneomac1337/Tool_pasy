@@ -79,6 +79,7 @@ def match_plants():
             'customer':    inv.customer,
             'source_file': inv.source_file,
             'plants':      matched,
+            'excluded':    inv.excluded,
         })
 
     return jsonify({

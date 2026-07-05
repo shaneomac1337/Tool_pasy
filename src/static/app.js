@@ -250,6 +250,17 @@ function renderMatchResults(data) {
       ? `<span class="badge badge-none">⚠ ${noneCount} nenalezeno</span>`
       : `<span class="badge badge-exact">✓ OK</span>`;
 
+    // Řádky vyřazené filtrem nerostlinných položek (audit) — nic, když nejsou
+    const exc = inv.excluded || [];
+    const excWord = exc.length === 1 ? 'položka' : exc.length < 5 ? 'položky' : 'položek';
+    const excludedHtml = exc.length === 0 ? '' : `
+      <details class="excluded-lines">
+        <summary>Vyřazeno: ${exc.length} ${excWord}</summary>
+        <ul>
+          ${exc.map(e => `<li>${(e.text || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')} <span class="excluded-kw">(${e.keyword})</span></li>`).join('')}
+        </ul>
+      </details>`;
+
     block.innerHTML = `
       <div class="invoice-block-header">
         <div>
@@ -269,7 +280,7 @@ function renderMatchResults(data) {
           </tr>
         </thead>
         <tbody id="tbody-${inv.number}"></tbody>
-      </table>`;
+      </table>${excludedHtml}`;
     matchInvoices.appendChild(block);
 
     const tbody = document.getElementById(`tbody-${inv.number}`);

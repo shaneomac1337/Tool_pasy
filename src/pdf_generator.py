@@ -201,6 +201,17 @@ def build_outputs(final_invoices: list, parsed_index: dict,
         warn_path.write_text('\n'.join(warnings), encoding='utf-8')
         files.append(warn_path)
 
+    # vyrazeno.txt — audit řádků vyřazených filtrem nerostlinných položek
+    excluded_lines = []
+    for inv_data in final_invoices:
+        parsed = parsed_index.get(str(inv_data.get('number', '')))
+        for item in (parsed.excluded if parsed is not None else []):
+            excluded_lines.append(f"Faktura {parsed.number}: {item['text']}")
+    if excluded_lines:
+        exc_path = output_dir / 'vyrazeno.txt'
+        exc_path.write_text('\n'.join(excluded_lines), encoding='utf-8')
+        files.append(exc_path)
+
     return {'dir': output_dir, 'files': files, 'warnings': warnings}
 
 

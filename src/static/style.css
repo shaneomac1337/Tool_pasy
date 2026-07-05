@@ -769,3 +769,24 @@ td { padding: 10px 14px; color: #333; }
 .cand-name { font-style: italic; color: #1e4a1e; }
 .cand-code { background: #e0f0e0; padding: 1px 5px; border-radius: 3px; font-family: monospace; }
 .cand-meta { color: #999; font-size: 11px; }
+
+/* ── Vyřazené položky (audit filtru nerostlinných řádků) ───── */
+.excluded-lines {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #888;
+}
+.excluded-lines summary {
+  cursor: pointer;
+  user-select: none;
+}
+.excluded-lines summary:hover { color: #555; }
+.excluded-lines ul {
+  margin: 4px 0 0;
+  padding-left: 22px;
+}
+.excluded-lines li { margin: 2px 0; }
+.excluded-kw {
+  color: #aaa;
+  font-style: italic;
+}
