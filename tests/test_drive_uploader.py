@@ -8,7 +8,8 @@ Kontrakt pod ochranou:
   se správným jménem, mimeType a rodičem.
 - upload_outputs: chybějící/prázdné výstupy → česká RuntimeError PŘED
   autentizací; stejnojmenný soubor v Drive → update, nový → create;
-  správné mimetypes; folder_link míří na složku dne; kořen Pasy se kešuje.
+  správné mimetypes; struktura Rostlinné pasy/{rok}/ (xlsx) +
+  {rok}/pdfka/{datum}/ (PDF); folder_link míří na složku dne; kořen se kešuje.
 - Flask: GET /api/drive-status a POST /api/upload-drive mapují totéž na HTTP.
 """
 import json
@@ -27,6 +28,7 @@ if str(APP_DIR) not in sys.path:
 import drive_uploader as du  # noqa: E402
 
 DATE = '2000-12-31'
+YEAR = '2000'
 FOLDER_MIME = 'application/vnd.google-apps.folder'
 XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 
@@ -122,12 +124,23 @@ def paths(tmp_path, monkeypatch):
 
 @pytest.fixture
 def outputs_dir(paths):
-    """Výstupní složka dne se dvěma soubory k nahrání."""
+    """Výstupní složka dne se dvěma soubory + denní Excel v kořeni výstupů."""
     day = paths / 'výstupy' / f'pasy_{DATE}'
     day.mkdir(parents=True)
     (day / 'a.pdf').write_bytes(b'%PDF-1.4 test')
     (day / 'recipients.xlsx').write_bytes(b'PK\x03\x04 test')
+    (paths / 'výstupy' / f'pasy_{DATE}.xlsx').write_bytes(b'PK\x03\x04 excel')
     return day
+
+
+def _drive_folders(day_id='day-folder-id'):
+    """Kompletní existující struktura složek na Drive pro daný den."""
+    return {
+        'Rostlinné pasy': 'root-id',
+        YEAR: 'year-id',
+        'pdfka': 'pdfka-id',
+        DATE: day_id,
+    }
 
 
 # ---------------------------------------------------------------- get_status
@@ -215,65 +228,93 @@ def test_upload_outputs_empty_dir_raises_before_auth(paths, monkeypatch):
 
 
 def test_upload_outputs_creates_new_files(paths, outputs_dir, monkeypatch):
-    files = _FakeFiles(folders={'Pasy': 'root-pasy-id', DATE: 'day-folder-id'})
+    files = _FakeFiles(folders=_drive_folders())
     monkeypatch.setattr(du, 'get_service', lambda: _FakeService(files))
 
     result = du.upload_outputs(DATE)
 
     assert result['folder_link'] == (
         'https://drive.google.com/drive/folders/day-folder-id')
+    assert result['year_folder_link'] == (
+        'https://drive.google.com/drive/folders/year-id')
     assert files.updates == []
-    assert files.folder_creates == []  # obě složky existovaly
+    assert files.folder_creates == []  # celá struktura složek existovala
 
+    excel_name = f'pasy_{DATE}.xlsx'
     by_name = {e['name']: e for e in result['files']}
-    assert set(by_name) == {'a.pdf', 'recipients.xlsx'}
+    assert set(by_name) == {'a.pdf', 'recipients.xlsx', excel_name}
     assert all(e['updated'] is False for e in by_name.values())
 
     creates = {c['body']['name']: c for c in files.file_creates}
-    assert set(creates) == {'a.pdf', 'recipients.xlsx'}
+    assert set(creates) == {'a.pdf', 'recipients.xlsx', excel_name}
     for name, call in creates.items():
-        assert call['body']['parents'] == ['day-folder-id']
         assert by_name[name]['link'] == _view_link(call['id'])
+
+    # Denní soubory jdou do pdfka/{datum}, Excel přímo do složky roku.
+    assert creates['a.pdf']['body']['parents'] == ['day-folder-id']
+    assert creates['recipients.xlsx']['body']['parents'] == ['day-folder-id']
+    assert creates[excel_name]['body']['parents'] == ['year-id']
 
     assert creates['a.pdf']['media_body'].mimetype() == 'application/pdf'
     assert creates['recipients.xlsx']['media_body'].mimetype() == XLSX_MIME
+    assert creates[excel_name]['media_body'].mimetype() == XLSX_MIME
 
-    # Id kořenové složky Pasy se kešuje do drive_config.json.
+    # Id kořenové složky 'Rostlinné pasy' se kešuje do drive_config.json.
     config = json.loads(
         (paths / 'drive_config.json').read_text(encoding='utf-8'))
-    assert config['pasy_folder_id'] == 'root-pasy-id'
+    assert config['root_folder_id'] == 'root-id'
+
+
+def test_upload_outputs_creates_missing_folder_structure(
+        paths, outputs_dir, monkeypatch):
+    files = _FakeFiles()  # na Drive zatím nic není
+    monkeypatch.setattr(du, 'get_service', lambda: _FakeService(files))
+
+    du.upload_outputs(DATE)
+
+    created = [c['body'] for c in files.folder_creates]
+    names = [b['name'] for b in created]
+    assert names == ['Rostlinné pasy', YEAR, 'pdfka', DATE]
+
+    ids = {b['name']: c['id'] for b, c in zip(created, files.folder_creates)}
+    assert 'parents' not in created[0]  # kořen patří do Můj disk
+    assert created[1]['parents'] == [ids['Rostlinné pasy']]
+    assert created[2]['parents'] == [ids[YEAR]]
+    assert created[3]['parents'] == [ids['pdfka']]
 
 def test_upload_outputs_reports_progress(paths, outputs_dir, monkeypatch):
-    files = _FakeFiles(folders={'Pasy': 'root-pasy-id', DATE: 'day-folder-id'})
+    files = _FakeFiles(folders=_drive_folders())
     monkeypatch.setattr(du, 'get_service', lambda: _FakeService(files))
     events = []
 
     result = du.upload_outputs(DATE, progress_callback=events.append, max_workers=1)
 
-    assert [f['name'] for f in result['files']] == ['a.pdf', 'recipients.xlsx']
+    excel_name = f'pasy_{DATE}.xlsx'
+    assert [f['name'] for f in result['files']] == [
+        excel_name, 'a.pdf', 'recipients.xlsx']
     assert events[0] == {
         'stage': 'preparing',
         'done': 0,
-        'total': 2,
+        'total': 3,
         'current': 'Připravuji složku na Drive…',
     }
     assert events[-1] == {
         'stage': 'done',
-        'done': 2,
-        'total': 2,
+        'done': 3,
+        'total': 3,
         'current': '',
     }
     uploaded_events = [event for event in events if event['stage'] == 'uploaded']
-    assert len(uploaded_events) == 2
-    assert [event['done'] for event in uploaded_events] == [1, 2]
+    assert len(uploaded_events) == 3
+    assert [event['done'] for event in uploaded_events] == [1, 2, 3]
     assert {event['file']['name'] for event in uploaded_events} == {
-        'a.pdf', 'recipients.xlsx'}
+        excel_name, 'a.pdf', 'recipients.xlsx'}
     assert all(event['file']['link'] for event in uploaded_events)
 
 
 def test_upload_outputs_updates_existing_file(paths, outputs_dir, monkeypatch):
     files = _FakeFiles(
-        folders={'Pasy': 'root-pasy-id', DATE: 'day-folder-id'},
+        folders=_drive_folders(),
         existing={'a.pdf': 'drive-a-id'})
     monkeypatch.setattr(du, 'get_service', lambda: _FakeService(files))
 
@@ -284,9 +325,22 @@ def test_upload_outputs_updates_existing_file(paths, outputs_dir, monkeypatch):
     assert by_name['recipients.xlsx']['updated'] is False
 
     assert [u['fileId'] for u in files.updates] == ['drive-a-id']
-    assert [c['body']['name'] for c in files.file_creates] == [
-        'recipients.xlsx']
+    assert sorted(c['body']['name'] for c in files.file_creates) == [
+        f'pasy_{DATE}.xlsx', 'recipients.xlsx']
     assert by_name['a.pdf']['link'] == _view_link('drive-a-id')
+
+
+def test_upload_outputs_without_daily_excel(paths, outputs_dir, monkeypatch):
+    # Bez Excelu dne se nahrají jen soubory denní složky do pdfka/{datum}.
+    (paths / 'výstupy' / f'pasy_{DATE}.xlsx').unlink()
+    files = _FakeFiles(folders=_drive_folders())
+    monkeypatch.setattr(du, 'get_service', lambda: _FakeService(files))
+
+    result = du.upload_outputs(DATE)
+
+    assert {e['name'] for e in result['files']} == {'a.pdf', 'recipients.xlsx'}
+    for c in files.file_creates:
+        assert c['body']['parents'] == ['day-folder-id']
 
 
 # ---------------------------------------------------------------- Flask routy
@@ -327,7 +381,7 @@ def test_upload_drive_route_no_outputs(client, paths, monkeypatch):
 
 def test_upload_drive_route_starts_job_and_reports_done(
         client, outputs_dir, monkeypatch):
-    files = _FakeFiles(folders={'Pasy': 'root-pasy-id', DATE: 'day-folder-id'})
+    files = _FakeFiles(folders=_drive_folders())
     monkeypatch.setattr(du, 'get_service', lambda: _FakeService(files))
 
     resp = client.post('/api/upload-drive', json={'date': DATE})
@@ -340,11 +394,12 @@ def test_upload_drive_route_starts_job_and_reports_done(
     final = wait_upload_done(client, started['job_id'])
     assert final['status'] == 'done'
     assert final['percent'] == 100
-    assert final['total'] == 2
-    assert final['done'] == 2
+    assert final['total'] == 3
+    assert final['done'] == 3
     assert final['folder_link'] == (
         'https://drive.google.com/drive/folders/day-folder-id')
-    assert {f['name'] for f in final['files']} == {'a.pdf', 'recipients.xlsx'}
+    assert {f['name'] for f in final['files']} == {
+        'a.pdf', 'recipients.xlsx', f'pasy_{DATE}.xlsx'}
 
 
 def test_upload_drive_progress_unknown_job(client):

@@ -120,30 +120,30 @@ def test_autonym_collapses_to_species(matcher):
     # var. epithet == species epithet -> treated as the bare species (exact).
     r = matcher.match_plant("Agave parryi var. parryi")
     assert r["match_type"] == "exact"
-    assert r["code"] == "25-Ro59"
+    assert r["code"] == "26-Ro59"
 
 
 def test_unknown_variety_suggests_species_not_exact(matcher):
     # A variety NOT in the DB must not masquerade as exact; the bare species
-    # 'Agave parryi' (25-Ro59) must be the top suggestion.
+    # 'Agave parryi' (26-Ro59) must be the top suggestion.
     r = matcher.match_plant("Agave parryi var. truncata")
     assert r["match_type"] != "exact"
-    assert top_code(r) == "25-Ro59"
+    assert top_code(r) == "26-Ro59"
 
 
 # ── 3) Cultivar landmine — precision must not collapse to species ─────────
 def test_known_cultivar_keeps_its_own_code(matcher):
     r = matcher.match_plant("Acer palmatum Atropurpureum")
     assert r["match_type"] == "exact"
-    assert r["code"] == "25-Ro33"          # its OWN code
-    assert r["code"] != "25-Ro32"          # must NOT collapse to the species
+    assert r["code"] == "26-Ro33"          # its OWN code
+    assert r["code"] != "26-Ro32"          # must NOT collapse to the species
 
 
 def test_absent_cultivar_falls_back_to_species(matcher):
     # 'Dissectum' cultivar is not in the DB -> not exact, species is top.
     r = matcher.match_plant("Acer palmatum Dissectum")
     assert r["match_type"] != "exact"
-    assert top_code(r) == "25-Ro32"
+    assert top_code(r) == "26-Ro32"
 
 
 # ── 4) Non-taxonomic junk stripping (real-invoice pain) ───────────────────
@@ -175,7 +175,7 @@ def test_cultivar_suffix_and_dimensions_dont_block(matcher):
 # ── 5) Bilingual 'Czech - Latin' split ────────────────────────────────────
 def test_bilingual_resolves_via_latin_part(matcher):
     latin = "Asimina triloba"
-    expected = code_for_name(matcher, latin)          # 25-Ro132
+    expected = code_for_name(matcher, latin)          # 26-Ro132
     r = matcher.match_plant(f"Pawpaw muďoul - {latin}")
     assert r["match_type"] == "exact"
     assert r["code"] in expected
@@ -187,7 +187,7 @@ def test_hybrid_token_order_is_exact(matcher):
     # must still be an exact hit on the same code.
     r = matcher.match_plant("Trachycarpus fortunei x wagnerianus")
     assert r["match_type"] == "exact"
-    assert r["code"] == "25-Ro1410"
+    assert r["code"] == "26-Ro1409"
 
 
 # ── 7) Diacritics folding ─────────────────────────────────────────────────
@@ -233,14 +233,14 @@ def test_duplicates_are_detected(matcher):
 
 
 def test_duplicate_name_surfaces_all_codes(matcher):
-    # 'Bouea macrophylla' has two distinct codes; both must appear so the user
+    # 'Caesalpinia gilliesii' has two distinct codes; both must appear so the user
     # can disambiguate rather than one being silently dropped.
-    dup = next((d for d in matcher.duplicates if d["key"] == "bouea macrophylla"), None)
-    assert dup is not None, "expected 'bouea macrophylla' among detected duplicates"
-    assert set(dup["codes"]) == {"25-Ro171", "25-Ro1540"}
-    r = matcher.match_plant("Bouea macrophylla")
+    dup = next((d for d in matcher.duplicates if d["key"] == "caesalpinia gilliesii"), None)
+    assert dup is not None, "expected 'caesalpinia gilliesii' among detected duplicates"
+    assert set(dup["codes"]) == {"26-Ro196", "26-Ro197"}
+    r = matcher.match_plant("Caesalpinia gilliesii")
     codes = candidate_codes(r)
-    for code in ("25-Ro171", "25-Ro1540"):
+    for code in ("26-Ro196", "26-Ro197"):
         assert code in codes, f"{code} dropped from candidates: {codes}"
 
 

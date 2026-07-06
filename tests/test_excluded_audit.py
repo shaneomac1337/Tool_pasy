@@ -51,7 +51,11 @@ def test_parse_items_clean_table_has_no_exclusions():
     ('DÁRKOVÝ POUKAZ', 'dárkový poukaz'),        # case-insensitive
     ('Přidaný produkt', 'přidaný produkt'),
     ('Agave parryi var. parryi', None),          # rostlina projde
-], ids=['voucher', 'voucher-upper', 'added-product', 'real-plant'])
+    ('Doprava PPL', 'ppl'),                      # celé slovo se chytí
+    ("Plamének Armandův 'Apple Blossom' - Clematis armandii, stálezelený",
+     None),                                      # 'ppl' uvnitř 'Apple' NE
+], ids=['voucher', 'voucher-upper', 'added-product', 'real-plant',
+        'ppl-word', 'apple-not-ppl'])
 def test_non_plant_keyword_returns_matched_keyword(name, keyword):
     assert PDFParser()._non_plant_keyword(name) == keyword
 

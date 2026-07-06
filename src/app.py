@@ -256,7 +256,8 @@ def drive_status_route():
 @app.route('/api/upload-drive', methods=['POST'])
 def upload_drive_route():
     """
-    Spustí nahrávání výstupů dne na Google Drive do složky Pasy/{datum}/.
+    Spustí nahrávání výstupů dne na Google Drive: Excel do Rostlinné
+    pasy/{rok}/, PDF do Rostlinné pasy/{rok}/pdfka/{datum}/.
     Body (volitelné): { "date": "YYYY-MM-DD" } — výchozí dnešek.
     """
     global _ACTIVE_UPLOAD_JOB_ID

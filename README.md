@@ -98,17 +98,21 @@ matched plants (voucher-only orders) produce no PDF.
 
 ## Google Drive upload
 
-The **☁ Nahrát na Drive** button uploads the current day's output folder to your
-Google Drive. Files land as **loose PDFs in a dated folder** — no ZIPs on Drive:
+The **☁ Nahrát na Drive** button uploads the current day's outputs to your
+Google Drive, organised by year. The day's passport Excel goes into the year
+folder; the PDFs land in `pdfka/{date}/` — no ZIPs on Drive:
 
 ```
-Drive/
-└── Pasy/                       # root folder, created once
-    └── 2026-07-04/             # one folder per generation day
-        ├── 637.pdf
-        ├── 662.pdf
-        ├── …
-        └── recipients.xlsx
+Můj disk/
+└── Rostlinné pasy/             # root folder, created once
+    └── 2026/                   # one folder per year
+        ├── pasy_2026-07-04.xlsx    # passport Excel (if generated that day)
+        └── pdfka/
+            └── 2026-07-04/     # one folder per generation day
+                ├── 637.pdf
+                ├── 662.pdf
+                ├── …
+                └── recipients.xlsx
 ```
 
 Re-uploading the same day **updates the existing files in place** (same Drive file
@@ -171,21 +175,25 @@ committed. Their locations are defined in `src/paths.py`.
 
 ```json
 {
-  "pasy_folder_id": "1AbCdEfGhIjKlMnOpQrStUvWxYz012345"
+  "root_folder_id": "1AbCdEfGhIjKlMnOpQrStUvWxYz012345"
 }
 ```
 
-- `pasy_folder_id` is the Drive ID of the top-level **`Pasy`** folder that all
-  dated subfolders go into.
-- On each upload the app validates this ID (a `files.get` call). If the folder was
-  deleted, trashed, or the ID is invalid, it **transparently recreates** `Pasy`
-  and rewrites the config — you don't have to do anything.
+- `root_folder_id` is the Drive ID of the top-level **`Rostlinné pasy`** folder
+  that all year folders go into.
+- On each upload the app validates this ID (a `files.get` call). If the folder
+  was deleted, trashed, or the ID is invalid, it **transparently recreates**
+  `Rostlinné pasy` and rewrites the config — you don't have to do anything.
 - **To point the tool at a different Drive folder**, put that folder's ID here
   (the long string in its URL: `drive.google.com/drive/folders/<THIS_ID>`). The
-  next upload will nest the dated folders inside it. Note: with the `drive.file`
+  next upload will nest the year folders inside it. Note: with the `drive.file`
   scope the app can only write to folders **it created**, so an arbitrary
   pre-existing folder may not be writable — the safe reset is to **delete
-  `drive_config.json`** and let the app create a fresh `Pasy` folder.
+  `drive_config.json`** and let the app create a fresh `Rostlinné pasy` folder.
+  If you already have a manually created `Rostlinné pasy` folder on Drive, let
+  the app create its own and move your old year folders into it (the app only
+  needs write access to folders it creates; old content sitting next to it is
+  fine).
 
 ### Drive-related endpoints
 

@@ -219,9 +219,16 @@ class PDFParser:
         return plants, excluded
 
     def _non_plant_keyword(self, name: str) -> Optional[str]:
-        """Vrátí klíčové slovo, kvůli kterému je řádek nerostlinný, jinak None."""
+        """Vrátí klíčové slovo, kvůli kterému je řádek nerostlinný, jinak None.
+
+        Porovnává celá slova (\\b), ne podřetězce — 'ppl' nesmí chytit
+        'Apple Blossom'.
+        """
         nl = name.lower()
-        return next((kw for kw in self.NON_PLANT_KEYWORDS if kw in nl), None)
+        return next(
+            (kw for kw in self.NON_PLANT_KEYWORDS
+             if re.search(r'\b' + re.escape(kw) + r'\b', nl)),
+            None)
 
     def _clean_name(self, name: str) -> str:
         name = re.sub(r'\s+', ' ', name).strip()

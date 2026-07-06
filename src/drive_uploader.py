@@ -1,6 +1,10 @@
 """
 Nahrávání výstupů (pasy + faktury) na Google Drive.
 
+Struktura na Drive:
+    Rostlinné pasy/{rok}/pasy_{datum}.xlsx
+    Rostlinné pasy/{rok}/pdfka/{datum}/*.pdf (+ recipients.xlsx, varovani.txt)
+
 OAuth installed-app flow s osobním Google účtem, scope pouze drive.file.
 Soubory credentials.json / token.json / drive_config.json leží vedle app.py.
 Import modulu nikdy nesmí selhat ani mít vedlejší efekty (síť, zápis souborů)
@@ -14,6 +18,9 @@ from pathlib import Path
 from paths import CREDENTIALS_PATH, TOKEN_PATH, CONFIG_PATH, OUTPUT_DIR as OUTPUT_BASE
 
 SCOPES = ['https://www.googleapis.com/auth/drive.file']
+
+ROOT_FOLDER_NAME = 'Rostlinné pasy'
+PDF_SUBFOLDER_NAME = 'pdfka'
 
 _MIMETYPES = {
     '.pdf': 'application/pdf',
@@ -64,7 +71,16 @@ def get_service():
     else:
         flow = InstalledAppFlow.from_client_secrets_file(
             str(CREDENTIALS_PATH), SCOPES)
-        creds = flow.run_local_server(port=0)
+        try:
+            # timeout: nedokončené přihlášení nesmí navždy zablokovat upload
+            creds = flow.run_local_server(port=0, timeout_seconds=180)
+        except Exception as e:
+            raise RuntimeError(
+                'Přihlášení ke Googlu se nedokončilo — zkuste to znovu '
+                'a potvrďte přístup v okně prohlížeče') from e
+        if creds is None:
+            raise RuntimeError(
+                'Přihlášení ke Googlu vypršelo (3 min) — zkuste to znovu')
         TOKEN_PATH.write_text(creds.to_json(), encoding='utf-8')
 
     return build('drive', 'v3', credentials=creds)
@@ -90,8 +106,8 @@ def ensure_folder(service, name: str, parent_id=None) -> str:
     return created['id']
 
 
-def _get_pasy_folder_id(service) -> str:
-    """Id kořenové složky 'Pasy' — cache v drive_config.json, ověřená get()."""
+def _get_root_folder_id(service) -> str:
+    """Id kořenové složky 'Rostlinné pasy' — cache v drive_config.json, ověřená get()."""
     config = {}
     if CONFIG_PATH.exists():
         try:
@@ -101,7 +117,7 @@ def _get_pasy_folder_id(service) -> str:
         except (json.JSONDecodeError, OSError):
             config = {}
 
-    cached = config.get('pasy_folder_id')
+    cached = config.get('root_folder_id')
     if cached:
         try:
             meta = service.files().get(
@@ -111,8 +127,8 @@ def _get_pasy_folder_id(service) -> str:
         except Exception:
             pass  # neplatné/smazané id — vytvoří se znovu
 
-    folder_id = ensure_folder(service, 'Pasy', None)
-    config['pasy_folder_id'] = folder_id
+    folder_id = ensure_folder(service, ROOT_FOLDER_NAME, None)
+    config['root_folder_id'] = folder_id
     CONFIG_PATH.write_text(
         json.dumps(config, ensure_ascii=False, indent=2), encoding='utf-8')
     return folder_id
@@ -126,14 +142,25 @@ def collect_output_files(date_str: str) -> list[Path]:
     return sorted(p for p in out_dir.iterdir() if p.is_file())
 
 
+def collect_excel_file(date_str: str) -> Path | None:
+    """Excel s pasy pro daný den (výstupy/pasy_{datum}.xlsx), pokud existuje."""
+    path = OUTPUT_BASE / f'pasy_{date_str}.xlsx'
+    return path if path.is_file() else None
+
+
 def upload_outputs(date_str: str, progress_callback=None, max_workers: int = 4) -> dict:
     """
-    Nahraje soubory z výstupy/pasy_{date_str}/ do Drive složky Pasy/{date_str}/.
+    Nahraje výstupy dne na Drive do struktury Rostlinné pasy/{rok}/…:
+    - výstupy/pasy_{datum}.xlsx  →  Rostlinné pasy/{rok}/
+    - výstupy/pasy_{datum}/*    →  Rostlinné pasy/{rok}/pdfka/{datum}/
     Stejnojmenné soubory přepíše (update), nové vytvoří. Vrací odkazy.
     """
-    local_files = collect_output_files(date_str)
-    if not local_files:
+    day_files = collect_output_files(date_str)
+    if not day_files:
         raise RuntimeError('Složka výstupů neexistuje — nejprve vygenerujte PDF')
+
+    excel_file = collect_excel_file(date_str)
+    local_files = ([excel_file] if excel_file else []) + day_files
 
     def report(event: dict) -> None:
         if progress_callback:
@@ -201,8 +228,15 @@ def upload_outputs(date_str: str, progress_callback=None, max_workers: int = 4) 
     })
 
     service = get_service()
-    pasy_id = _get_pasy_folder_id(service)
-    folder_id = ensure_folder(service, date_str, pasy_id)
+    root_id = _get_root_folder_id(service)
+    year_id = ensure_folder(service, date_str[:4], root_id)
+    pdfka_id = ensure_folder(service, PDF_SUBFOLDER_NAME, year_id)
+    day_id = ensure_folder(service, date_str, pdfka_id)
+
+    # Excel dne patří přímo do složky roku, obsah denní složky do pdfka/{datum}.
+    targets = {path: day_id for path in day_files}
+    if excel_file:
+        targets[excel_file] = year_id
 
     done_count = 0
     progress_lock = threading.Lock()
@@ -211,7 +245,7 @@ def upload_outputs(date_str: str, progress_callback=None, max_workers: int = 4) 
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=worker_count) as executor:
         futures = {
-            executor.submit(upload_one, index, path, folder_id): path
+            executor.submit(upload_one, index, path, targets[path]): path
             for index, path in enumerate(local_files)
         }
         for future in concurrent.futures.as_completed(futures):
@@ -230,6 +264,7 @@ def upload_outputs(date_str: str, progress_callback=None, max_workers: int = 4) 
     })
 
     return {
-        'folder_link': f'https://drive.google.com/drive/folders/{folder_id}',
+        'folder_link': f'https://drive.google.com/drive/folders/{day_id}',
+        'year_folder_link': f'https://drive.google.com/drive/folders/{year_id}',
         'files': [item for item in uploaded if item is not None],
     }
