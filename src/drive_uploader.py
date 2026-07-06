@@ -9,6 +9,7 @@ Import modulu nikdy nesmí selhat ani mít vedlejší efekty (síť, zápis soub
 import concurrent.futures
 import json
 import threading
+from pathlib import Path
 
 from paths import CREDENTIALS_PATH, TOKEN_PATH, CONFIG_PATH, OUTPUT_DIR as OUTPUT_BASE
 
