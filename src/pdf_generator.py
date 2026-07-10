@@ -72,7 +72,7 @@ def _draw_header(c, top_y: float) -> float:
         fy = band_bottom + (_HEADER_H - fh) / 2
         c.drawImage(img, fx, fy, fw, fh)
     except Exception as e:
-        print(f"Varování: Nelze vložit vlajku: {e}")
+        print(f"Varování: Nelze vložit vlajku: {e!r}")
 
     # Texty vpravo od vlajky
     tx = _LEFT + _FLAG_CELL_W + 0.3 * cm
@@ -201,12 +201,19 @@ def build_outputs(final_invoices: list, parsed_index: dict,
         warn_path.write_text('\n'.join(warnings), encoding='utf-8')
         files.append(warn_path)
 
-    # vyrazeno.txt — audit řádků vyřazených filtrem nerostlinných položek
+    # vyrazeno.txt — audit řádků vyřazených filtrem nerostlinných položek.
+    # Když frontend pošle klíč 'excluded', platí JEHO stav (uživatel mohl
+    # položky vrátit na pas); bez klíče se bere stav z parseru.
     excluded_lines = []
     for inv_data in final_invoices:
-        parsed = parsed_index.get(str(inv_data.get('number', '')))
-        for item in (parsed.excluded if parsed is not None else []):
-            excluded_lines.append(f"Faktura {parsed.number}: {item['text']}")
+        number = str(inv_data.get('number', ''))
+        if 'excluded' in inv_data:
+            items = inv_data['excluded'] or []
+        else:
+            parsed = parsed_index.get(number)
+            items = parsed.excluded if parsed is not None else []
+        for item in items:
+            excluded_lines.append(f"Faktura {number}: {item['text']}")
     if excluded_lines:
         exc_path = output_dir / 'vyrazeno.txt'
         exc_path.write_text('\n'.join(excluded_lines), encoding='utf-8')

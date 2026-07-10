@@ -40,6 +40,7 @@ const btnToStep3    = document.getElementById('btn-to-step3');
 
 let currentInvoices  = [];
 let currentInvoiceMeta = {};   // číslo → { customer, date }
+const excludedState = {};      // číslo → [{text, keyword, quantity, included}]
 
 // ══════════════════════════════════════════════════════════
 // KROK 1 — Upload PDF
@@ -250,16 +251,14 @@ function renderMatchResults(data) {
       ? `<span class="badge badge-none">⚠ ${noneCount} nenalezeno</span>`
       : `<span class="badge badge-exact">✓ OK</span>`;
 
-    // Řádky vyřazené filtrem nerostlinných položek (audit) — nic, když nejsou
-    const exc = inv.excluded || [];
-    const excWord = exc.length === 1 ? 'položka' : exc.length < 5 ? 'položky' : 'položek';
-    const excludedHtml = exc.length === 0 ? '' : `
-      <details class="excluded-lines">
-        <summary>Vyřazeno: ${exc.length} ${excWord}</summary>
-        <ul>
-          ${exc.map(e => `<li>${(e.text || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')} <span class="excluded-kw">(${e.keyword})</span></li>`).join('')}
-        </ul>
-      </details>`;
+    // Řádky vyřazené filtrem nerostlinných položek — uživatel je může
+    // schválit (nechat vyřazené), nebo vrátit na pas.
+    excludedState[inv.number] = (inv.excluded || []).map(e => ({
+      text: e.text || '',
+      keyword: e.keyword || '',
+      quantity: e.quantity || 1,
+      included: false,
+    }));
 
     block.innerHTML = `
       <div class="invoice-block-header">
@@ -280,13 +279,14 @@ function renderMatchResults(data) {
           </tr>
         </thead>
         <tbody id="tbody-${inv.number}"></tbody>
-      </table>${excludedHtml}`;
+      </table><div class="excluded-panel" id="excpanel-${inv.number}"></div>`;
     matchInvoices.appendChild(block);
 
     const tbody = document.getElementById(`tbody-${inv.number}`);
     inv.plants.forEach((plant, idx) => {
       tbody.appendChild(renderPlantRow(inv.number, idx, plant));
     });
+    renderExcludedPanel(inv.number);
   });
 
   matchInvoices.classList.remove('hidden');
@@ -315,8 +315,8 @@ function renderPlantRow(invNum, idx, plant) {
     passportCell = `<span class="passport-name">${passportName}</span>
                     <div class="fuzzy-suggestion">
                       <span class="reason">${plant.reason || 'Zkontroluj název v pasu'}</span>
-                      <button class="btn-fuzzy-accept" onclick="acceptFuzzy('${invNum}',${idx})">✓ Potvrdit</button>
-                      <button class="btn-fuzzy-reject" onclick="rejectFuzzy('${invNum}',${idx},'${esc(plant.invoice_name)}')">✗ Zadat jiný</button>
+                      <button class="btn-fuzzy-accept" onclick="acceptFuzzy('${invNum}','${idx}')">✓ Potvrdit</button>
+                      <button class="btn-fuzzy-reject" onclick="rejectFuzzy('${invNum}','${idx}','${esc(plant.invoice_name)}')">✗ Zadat jiný</button>
                     </div>
                     ${renderCandidateList(invNum, idx, cands)}`;
     codeCell     = `<span class="code-display fuzzy-code">${code}</span>
@@ -338,23 +338,100 @@ function renderPlantRow(invNum, idx, plant) {
   return tr;
 }
 
+// ── Vyřazené položky — schválení / návrat na pas ────────────
+
+/** Vykreslí panel vyřazených položek pod tabulkou faktury. */
+function renderExcludedPanel(invNum) {
+  const panel = document.getElementById(`excpanel-${invNum}`);
+  if (!panel) return;
+  const items = excludedState[invNum] || [];
+  if (items.length === 0) { panel.innerHTML = ''; return; }
+
+  const rows = items.map((e, i) => {
+    const label = `${escHtml(e.text)} <span class="excluded-kw">(filtr: ${escHtml(e.keyword)})</span>`;
+    if (e.included) {
+      return `<li class="exc-included">
+        <span class="exc-text">${label}</span>
+        <span class="exc-included-note">↩ zařazeno na pas — přiřaďte kód v tabulce výše</span>
+      </li>`;
+    }
+    return `<li>
+      <span class="exc-text">${label}</span>
+      <button class="btn-reinclude" onclick="reincludeExcluded('${invNum}',${i})">↩ Zařadit na pas</button>
+    </li>`;
+  }).join('');
+
+  const n = items.length;
+  const word = n === 1 ? 'položka' : n < 5 ? 'položky' : 'položek';
+  panel.innerHTML = `
+    <div class="excluded-head">⚠ Vyřazeno filtrem: ${n} ${word} — zkontrolujte; ponecháním schvalujete vyřazení</div>
+    <ul>${rows}</ul>`;
+}
+
+/** Vrátí vyřazenou položku zpět na pas: přidá řádek do tabulky rostlin. */
+function reincludeExcluded(invNum, i) {
+  const item  = (excludedState[invNum] || [])[i];
+  const tbody = document.getElementById(`tbody-${invNum}`);
+  if (!item || item.included || !tbody) return;
+  item.included = true;
+
+  const idx = `x${i}`;
+  const tr = renderPlantRow(invNum, idx, {
+    invoice_name: item.text,
+    quantity:     item.quantity || 1,
+    match_type:   'none',
+  });
+  tr.classList.add('reincluded-row');
+  const undo = document.createElement('button');
+  undo.className = 'btn-reexclude';
+  undo.textContent = '✗ Vyřadit zpět';
+  undo.title = 'Vrátit položku mezi vyřazené';
+  undo.onclick = () => unincludeExcluded(invNum, i);
+  tr.cells[2].appendChild(undo);
+  tbody.appendChild(tr);
+
+  // Prefill bez escapování atributů + rovnou zkusit najít kód
+  const input = document.getElementById(`minput-${invNum}-${idx}`);
+  if (input) input.value = item.text;
+  renderExcludedPanel(invNum);
+  doManualSearch(invNum, idx);
+  checkStep2Ready();
+  updateInvoiceHeaderBadge(invNum);
+}
+
+/** Zruší návrat na pas — řádek zmizí a položka je zase vyřazená. */
+function unincludeExcluded(invNum, i) {
+  const item = (excludedState[invNum] || [])[i];
+  if (!item) return;
+  item.included = false;
+  const tr = document.getElementById(`row-${invNum}-x${i}`);
+  if (tr) tr.remove();
+  renderExcludedPanel(invNum);
+  checkStep2Ready();
+  updateInvoiceHeaderBadge(invNum);
+}
+
+function escHtml(s) {
+  return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 function buildManualSearch(invNum, idx, prefill) {
   return `
     <div class="manual-search" id="msearch-${invNum}-${idx}">
       <input type="text" class="manual-input"
              placeholder="Zadej název ze šarže…"
              value="${esc(prefill || '')}"
-             onkeydown="if(event.key==='Enter'){event.preventDefault();doManualSearch('${invNum}',${idx});}"
+             onkeydown="if(event.key==='Enter'){event.preventDefault();doManualSearch('${invNum}','${idx}');}"
              id="minput-${invNum}-${idx}" />
-      <button class="btn-search" onclick="doManualSearch('${invNum}',${idx})">🔍 Hledat</button>
-      <button class="btn-add-sarze" onclick="toggleAddSarze('${invNum}',${idx})">+ Přidat do šarže</button>
+      <button class="btn-search" onclick="doManualSearch('${invNum}','${idx}')">🔍 Hledat</button>
+      <button class="btn-add-sarze" onclick="toggleAddSarze('${invNum}','${idx}')">+ Přidat do šarže</button>
       <div class="add-sarze-form hidden" id="saddform-${invNum}-${idx}">
         <input type="text" class="manual-input" placeholder="Název rostliny"
                value="${esc(prefill || '')}" id="saddname-${invNum}-${idx}" />
         <input type="text" class="manual-input" placeholder="Kód šarže"
-               onkeydown="if(event.key==='Enter'){event.preventDefault();doAddSarze('${invNum}',${idx});}"
+               onkeydown="if(event.key==='Enter'){event.preventDefault();doAddSarze('${invNum}','${idx}');}"
                id="saddcode-${invNum}-${idx}" />
-        <button class="btn-search" onclick="doAddSarze('${invNum}',${idx})">✓ Přidat</button>
+        <button class="btn-search" onclick="doAddSarze('${invNum}','${idx}')">✓ Přidat</button>
       </div>
       <div class="search-result" id="sresult-${invNum}-${idx}"></div>
     </div>`;
@@ -401,7 +478,7 @@ function renderCandidateList(invNum, idx, cands) {
   const items = cands.map(c => `
     <li class="cand">
       <button class="btn-cand"
-              onclick="acceptCandidate('${invNum}',${idx},'${esc(c.passport_name)}','${esc(c.code)}','${esc(c.country)}')">Použít</button>
+              onclick="acceptCandidate('${invNum}','${idx}','${esc(c.passport_name)}','${esc(c.code)}','${esc(c.country)}')">Použít</button>
       <span class="cand-name">${c.passport_name}</span>
       <code class="cand-code">${c.code}</code>
       <span class="cand-meta">${c.confidence}% ${levelLabel(c.level)}</span>
@@ -668,11 +745,17 @@ function collectFinalData() {
     });
 
     if (plants.length > 0) {
+      // Finální stav vyřazených položek (bez těch vrácených na pas) —
+      // řídí obsah vyrazeno.txt na serveru.
+      const excluded = (excludedState[invNum] || [])
+        .filter(e => !e.included)
+        .map(e => ({ text: e.text, keyword: e.keyword }));
       invoices.push({
         number:   invNum,
         customer: meta.customer || '',
         date:     meta.date     || '',
-        plants
+        plants,
+        excluded
       });
     }
   });

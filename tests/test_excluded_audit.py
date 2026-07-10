@@ -35,7 +35,7 @@ def test_parse_items_splits_plants_and_excluded():
 
     assert [p.name for p in plants] == ['Agave parryi var. parryi']
     assert excluded == [{'text': 'Dárkový poukaz v hodnotě 1000 Kč',
-                         'keyword': 'dárkový poukaz'}]
+                         'keyword': 'dárkový poukaz', 'quantity': 1}]
 
 
 def test_parse_items_clean_table_has_no_exclusions():
@@ -105,8 +105,10 @@ def test_multipage_invoice_merges_exclusions(monkeypatch):
     assert inv.number == '111'
     assert [p.name for p in inv.plants] == ['Acer palmatum', 'Hosta hybrid']
     assert inv.excluded == [
-        {'text': 'Přidaný produkt', 'keyword': 'přidaný produkt'},
-        {'text': 'Dárkový poukaz v hodnotě 500 Kč', 'keyword': 'dárkový poukaz'},
+        {'text': 'Přidaný produkt', 'keyword': 'přidaný produkt',
+         'quantity': 1},
+        {'text': 'Dárkový poukaz v hodnotě 500 Kč', 'keyword': 'dárkový poukaz',
+         'quantity': 1},
     ]
 
 
@@ -138,6 +140,28 @@ def test_vyrazeno_txt_content_and_zip_membership(tmp_path):
     assert not (out_dir / '112.pdf').exists()
     with zipfile.ZipFile(zip_outputs(result['files'])) as zf:
         assert 'vyrazeno.txt' in zf.namelist()
+
+
+def test_vyrazeno_prefers_frontend_decisions(tmp_path):
+    """Když faktura nese klíč 'excluded' (finální stav z UI), platí on:
+    položky vrácené uživatelem na pas se do vyrazeno.txt nedostanou,
+    i když je parser původně vyřadil."""
+    out_dir = tmp_path / 'out'
+    result = build_outputs(
+        [{'number': '111', 'customer': 'X', 'date': '', 'plants': PLANTS,
+          'excluded': []},                        # uživatel vše vrátil na pas
+         {'number': '112', 'customer': 'Y', 'date': '', 'plants': PLANTS,
+          'excluded': [{'text': 'Doprava PPL', 'keyword': 'ppl'}]}],
+        {'111': Invoice(number='111', excluded=[
+            {'text': 'Plamének Armandův', 'keyword': 'ppl', 'quantity': 1}]),
+         '112': Invoice(number='112', excluded=[])},
+        {},
+        out_dir,
+    )
+
+    exc_path = out_dir / 'vyrazeno.txt'
+    assert exc_path in result['files']
+    assert exc_path.read_text(encoding='utf-8') == 'Faktura 112: Doprava PPL'
 
 
 def test_no_vyrazeno_txt_when_nothing_excluded(tmp_path):

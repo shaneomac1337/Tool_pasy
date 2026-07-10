@@ -1,5 +1,6 @@
 import io
 import base64
+import sys
 import tempfile
 import openpyxl
 from openpyxl.styles import Font, Alignment, Border, Side
@@ -8,6 +9,11 @@ from pathlib import Path
 from datetime import date
 
 from paths import ASSETS_DIR
+
+# Přibalené assets ve frozen bundlu (PyInstaller) — stejně jako fonty
+# v pdf_generator.py; ve vývoji míří na assets/ v kořeni projektu.
+_BUNDLE_ASSETS = Path(
+    getattr(sys, '_MEIPASS', Path(__file__).resolve().parent.parent)) / 'assets'
 
 
 # EU vlajka zakódovaná jako base64 – nevyžaduje žádný externí soubor
@@ -44,10 +50,12 @@ _EU_FLAG_B64 = (
 
 def _get_flag_image_path() -> str:
     """Vrátí cestu k souboru s EU vlajkou.
-    Preferuje eu_flag.png vedle tohoto souboru, jinak použije base64 zálohu."""
-    local_flag = ASSETS_DIR / 'eu_flag.png'
-    if local_flag.exists():
-        return str(local_flag)
+    Hledá eu_flag.png v assets/ (vedle aplikace i v přibaleném bundlu),
+    jinak použije base64 zálohu."""
+    for local_flag in (ASSETS_DIR / 'eu_flag.png',
+                       _BUNDLE_ASSETS / 'eu_flag.png'):
+        if local_flag.exists():
+            return str(local_flag)
     # záloha: dekóduj z base64 do dočasného souboru
     data = base64.b64decode(_EU_FLAG_B64)
     tmp = tempfile.NamedTemporaryFile(suffix='.png', delete=False)

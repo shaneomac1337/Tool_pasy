@@ -70,6 +70,26 @@ def test_added_name_found_exact_by_search_plant(client):
     assert data['code'] == '25-X9'
 
 
+def test_add_writes_right_after_last_data_row(client, catalog, monkeypatch):
+    """Exporty šarže mívají na konci stovky prázdných naformátovaných řádků.
+    Nový záznam musí přistát HNED za posledním neprázdným řádkem, ne až pod
+    prázdným blokem, kde ho v Excelu nikdo nenajde."""
+    wb = openpyxl.load_workbook(catalog)
+    ws = wb.active
+    for row in range(3, 500):                      # prázdný, jen dotčený blok
+        ws.cell(row=row, column=1).value = None
+        ws.cell(row=row, column=3, value=None).number_format = '@'
+    wb.save(catalog)
+    assert openpyxl.load_workbook(catalog).active.max_row > 400
+
+    resp = client.post('/api/add-sarze', json={
+        'name': 'Quercus robur', 'code': '25-X9'})
+
+    assert resp.status_code == 200
+    ws = openpyxl.load_workbook(catalog).active
+    assert tuple(c.value for c in ws[3][:3]) == ('Quercus robur', '25-X9', 'CZ')
+
+
 def test_country_is_trimmed_and_stored(client, catalog):
     resp = client.post('/api/add-sarze', json={
         'name': 'Pinus nigra', 'code': '25-P1', 'country': '  DE  '})

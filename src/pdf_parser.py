@@ -180,16 +180,7 @@ class PDFParser:
             if not raw_name or len(raw_name) < 3:
                 continue
 
-            kw = self._non_plant_keyword(raw_name)
-            if kw:
-                excluded.append({'text': raw_name, 'keyword': kw})
-                continue
-
-            clean = self._clean_name(raw_name)
-            if not clean or len(clean) < 3:
-                continue
-
-            # Množství — row[1]
+            # Množství — row[1] (i pro vyřazené řádky, kvůli návratu na pas)
             qty = 1
             if len(row) > 1 and row[1]:
                 qty_str = str(row[1]).strip()
@@ -197,6 +188,16 @@ class PDFParser:
                     qty = int(qty_str)
                 except ValueError:
                     pass
+
+            kw = self._non_plant_keyword(raw_name)
+            if kw:
+                excluded.append(
+                    {'text': raw_name, 'keyword': kw, 'quantity': qty})
+                continue
+
+            clean = self._clean_name(raw_name)
+            if not clean or len(clean) < 3:
+                continue
 
             # Cena / ks — row[2]
             price = 0.0

@@ -116,7 +116,15 @@ def add_sarze():
     # ponytail: bez zámku souboru — lokální nástroj pro jednoho uživatele;
     # při víceuživatelském provozu doplnit per-file zámek.
     wb = openpyxl.load_workbook(SARZE_PATH)
-    wb.active.append([name, code, country])
+    ws = wb.active
+    # Zapisuj hned za poslední NEPRÁZDNÝ řádek — exporty mívají na konci
+    # stovky prázdných naformátovaných řádků a append() by zapsal až pod ně,
+    # kde záznam v Excelu nikdo nenajde.
+    last = ws.max_row
+    while last > 1 and not any(cell.value for cell in ws[last]):
+        last -= 1
+    for col, value in enumerate([name, code, country], start=1):
+        ws.cell(row=last + 1, column=col, value=value)
     wb.save(SARZE_PATH)
 
     matcher = PlantMatcher(str(SARZE_PATH))

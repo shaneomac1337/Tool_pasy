@@ -813,3 +813,63 @@ td { padding: 10px 14px; color: #333; }
   color: #aaa;
   font-style: italic;
 }
+
+/* ── Interaktivní panel vyřazených položek ────────────────── */
+.excluded-panel {
+  margin-top: 8px;
+  font-size: 13px;
+  background: #fdf8ee;
+  border: 1px solid #ecd9a8;
+  border-radius: 6px;
+  padding: 8px 12px;
+}
+.excluded-panel:empty { display: none; }
+.excluded-head {
+  font-weight: 600;
+  color: #8a6d1f;
+  margin-bottom: 4px;
+}
+.excluded-panel ul {
+  margin: 0;
+  padding-left: 4px;
+  list-style: none;
+}
+.excluded-panel li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+  border-top: 1px dashed #ecd9a8;
+}
+.excluded-panel li:first-child { border-top: none; }
+.exc-text { flex: 1; color: #555; }
+.exc-included .exc-text { color: #999; text-decoration: line-through; }
+.exc-included-note {
+  color: #2a5f2a;
+  font-size: 12px;
+  font-weight: 600;
+}
+.btn-reinclude {
+  border: 1px solid #2a5f2a;
+  background: #fff;
+  color: #2a5f2a;
+  border-radius: 4px;
+  padding: 3px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.btn-reinclude:hover { background: #eaf4ea; }
+.btn-reexclude {
+  display: block;
+  margin-top: 4px;
+  border: 1px solid #c0392b;
+  background: #fff;
+  color: #c0392b;
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+.btn-reexclude:hover { background: #fdecea; }
+.reincluded-row { background: #fdf8ee; }
